@@ -140,7 +140,7 @@ export function currency(value: number | null | undefined): string {
 
 export function isOverdue(order: {
   expected_delivery_date: string | null;
-  status: OrderStatus;
+  status: string;
 }): boolean {
   if (!order.expected_delivery_date) return false;
   if (["delivered", "completed", "cancelled"].includes(order.status)) return false;
