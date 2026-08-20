@@ -1,1 +1,12 @@
 project_id = "czyczbldsfajtptyjiqh"
+
+[functions.create-team-member]
+enabled = true
+verify_jwt = false
+import_map = "./functions/create-team-member/deno.json"
+entrypoint = "./functions/create-team-member/index.ts"
+
+[functions.delete-team-member]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/delete-team-member/index.ts"

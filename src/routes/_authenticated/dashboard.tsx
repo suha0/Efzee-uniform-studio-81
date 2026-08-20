@@ -146,12 +146,18 @@ function DashboardPage() {
   ).map(([status, count]) => ({ name: titleize(status), count }));
 
   const byCategory = Object.entries(
-    orders.reduce<Record<string, number>>((accumulator, order) => {
-      const key = order.product_category ?? "Uncategorised";
-      accumulator[key] = (accumulator[key] ?? 0) + 1;
-      return accumulator;
-    }, {}),
-  ).map(([name, value]) => ({ name, value }));
+  orders.reduce<Record<string, number>>((accumulator, order) => {
+    const key = order.product_name?.trim() || "Other Products";
+    accumulator[key] = (accumulator[key] ?? 0) + 1;
+    return accumulator;
+  }, {}),
+)
+  .sort((a, b) => b[1] - a[1])
+  .slice(0, 6)
+  .map(([name, value]) => ({
+    name,
+    value,
+  }));
 
   const overTime = Object.entries(
     orders.reduce<Record<string, number>>((accumulator, order) => {
@@ -284,7 +290,7 @@ function DashboardPage() {
           </div>
         </div>
         <div className="surface p-4">
-          <h2 className="mb-4 text-sm font-semibold">Category mix</h2>
+          <h2 className="mb-4 text-sm font-semibold">Product mix</h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>

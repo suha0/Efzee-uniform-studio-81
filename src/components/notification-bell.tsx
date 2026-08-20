@@ -101,7 +101,7 @@ export function NotificationBell() {
               <Link
                 key={item.id}
                 to={item.order_id ? "/orders/$orderId" : "/notifications"}
-                params={item.order_id ? { orderId: item.order_id } : undefined}
+                {...(item.order_id ? { params: { orderId: item.order_id } } : {})}
                 className="block border-b px-3 py-2.5 last:border-b-0 hover:bg-muted/60"
               >
                 <div className="flex items-start gap-2">

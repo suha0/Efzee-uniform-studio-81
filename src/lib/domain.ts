@@ -131,9 +131,9 @@ export function formatDateTime(value: string | null | undefined): string {
 }
 
 export function currency(value: number | null | undefined): string {
-  return new Intl.NumberFormat("en-IN", {
+  return new Intl.NumberFormat("en-AE", {
     style: "currency",
-    currency: "INR",
+    currency: "AED",
     maximumFractionDigits: 0,
   }).format(value ?? 0);
 }

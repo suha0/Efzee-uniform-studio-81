@@ -88,7 +88,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
         <Brand />
       </div>
       <div className="flex-1 overflow-y-auto py-4">
-        <NavLinks onNavigate={onNavigate} />
+        <NavLinks {...(onNavigate ? { onNavigate } : {})} />
       </div>
       <div className="border-t border-sidebar-border px-5 py-3 text-[11px] text-sidebar-foreground/50">
         Uniform Studio 81 · Production Suite
