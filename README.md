@@ -1,6 +1,4 @@
-# Uniform Flow
-
-Build Uniform Studio 81 — Production-Ready Uniform Manufacturing Order Management System
+Uniform Studio 81 — Production-Ready Uniform Manufacturing Order Management System
 
 1. PROJECT OVERVIEW
 
