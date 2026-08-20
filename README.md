@@ -806,7 +806,7 @@ Version control helps maintain:
 
 # 👩‍💻 Developer
 
-## Suu
+## Suha Mariyam
 
 Computer Science & Engineering
 
