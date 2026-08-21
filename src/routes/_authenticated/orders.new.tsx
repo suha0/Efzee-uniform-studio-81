@@ -1726,7 +1726,9 @@ function NewOrderPage() {
                 </div>
                 <div className="rounded-md bg-muted/50 p-3">
                   <p className="label-caps">AMOUNT (AED)</p>
-                  <p className="mt-1 font-semibold">AED {formatAed(amount)}</p>
+                  <p className="mt-1 font-semibold">
+  {totalQuantity > 0 ? `AED ${formatAed(amount)}` : "—"}
+</p>
                 </div>
               </div>
 
@@ -1739,7 +1741,9 @@ function NewOrderPage() {
               <div className="mt-3 rounded-md border p-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium">ROUND OFF (AED)</span>
-                  <span className="font-semibold">AED {formatAed(roundOff)}</span>
+                  <span className="font-semibold">
+  {totalQuantity > 0 ? `AED ${formatAed(roundOff)}` : "—"}
+</span>
                 </div>
               </div>
             </div>
