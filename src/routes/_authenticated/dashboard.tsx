@@ -160,15 +160,15 @@ function DashboardPage() {
   }));
 
   const overTime = Object.entries(
-    orders.reduce<Record<string, number>>((accumulator, order) => {
-      const key = new Date(order.order_date).toLocaleDateString("en-GB", {
-        month: "short",
-        year: "2-digit",
-      });
-      accumulator[key] = (accumulator[key] ?? 0) + 1;
-      return accumulator;
-    }, {}),
-  ).map(([name, orders_count]) => ({ name, orders: orders_count }));
+  orders.reduce<Record<string, number>>((accumulator, order) => {
+    const key = new Date(order.order_date).toLocaleDateString("en-GB", {
+      month: "short",
+      year: "2-digit",
+    });
+    accumulator[key] = (accumulator[key] ?? 0) + 1;
+    return accumulator;
+  }, {}),
+).map(([name, orders_count]) => ({ name, orders: orders_count }));
 
   const blockedStages = stages.filter((stage) => stage.status === "blocked");
   const overdueOrders = orders.filter(isOverdue);
@@ -317,11 +317,14 @@ function DashboardPage() {
                 <YAxis fontSize={11} allowDecimals={false} />
                 <Tooltip />
                 <Line
-                  type="monotone"
-                  dataKey="orders"
-                  stroke="var(--color-chart-1)"
-                  strokeWidth={2}
-                />
+  type="monotone"
+  dataKey="orders"
+  stroke="var(--color-chart-1)"
+  strokeWidth={2}
+  dot={{ r: 4 }}
+  activeDot={{ r: 6 }}
+  connectNulls
+/>
               </LineChart>
             </ResponsiveContainer>
           </div>
