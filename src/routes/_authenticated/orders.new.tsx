@@ -1,10 +1,19 @@
 import { useMemo, useState } from "react";
+import type {
+  ChangeEvent,
+  Dispatch,
+  SetStateAction,
+} from "react";
 
-import type { ChangeEvent } from "react";
+import {
+  createFileRoute,
+  useNavigate,
+} from "@tanstack/react-router";
 
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { toast } from "sonner";
 
@@ -17,17 +26,11 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
-
 import { useAuth } from "@/hooks/use-auth";
-
 import { PageHeader } from "@/components/page-header";
-
 import { Button } from "@/components/ui/button";
-
 import { Input } from "@/components/ui/input";
-
 import { Label } from "@/components/ui/label";
-
 import { Textarea } from "@/components/ui/textarea";
 
 import {
@@ -45,9 +48,14 @@ import {
   titleize,
 } from "@/lib/domain";
 
-import { logActivity, notifyStaff } from "@/lib/notify";
+import {
+  logActivity,
+  notifyStaff,
+} from "@/lib/notify";
 
-export const Route = createFileRoute("/_authenticated/orders/new")({
+export const Route = createFileRoute(
+  "/_authenticated/orders/new",
+)({
   component: NewOrderPage,
 });
 
@@ -115,7 +123,12 @@ function formatCapturedTime(value: string) {
 function NewOrderPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user, profile, canSell, role } = useAuth();
+
+  const {
+    user,
+    profile,
+    canSell,
+  } = useAuth();
 
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -132,80 +145,107 @@ function NewOrderPage() {
     address: "",
   });
 
-  const [creatingCustomer, setCreatingCustomer] = useState(false);
+  const [creatingCustomer, setCreatingCustomer] =
+    useState(false);
 
   /*
-   * Time is captured automatically when the order creation page is opened.
-   * We do not ask the user to enter this manually.
+   * Time is captured automatically when
+   * the order creation page is opened.
    */
   const [timeCaptured] = useState(getCapturedTime);
 
   const [order, setOrder] = useState({
-    order_number: `ORD-${Date.now().toString().slice(-6)}`,
-    order_date: new Date().toISOString().slice(0, 10),
+    order_number: `ORD-${Date.now()
+      .toString()
+      .slice(-6)}`,
+
+    order_date: new Date()
+      .toISOString()
+      .slice(0, 10),
+
     expected_delivery_date: "",
+
     priority: "normal",
 
     product_name: "",
 
     /*
-     * product_category is retained internally because the existing
-     * database/order item structure expects this field.
-     * It now stores the selected sleeve type.
+     * Existing database field retained for compatibility.
+     * It stores the selected sleeve type.
      */
     product_category: "Short Sleeve",
 
     color: "",
 
     special_instructions: "",
+
     remarks: "",
   });
 
   /*
    * Repeatable Product Info fields.
-   *
-   * The first row is always available.
-   * Clicking + adds another row.
    */
-  const [fabricDetails, setFabricDetails] = useState<string[]>([""]);
 
-  const [fabricSuppliers, setFabricSuppliers] = useState<string[]>([""]);
+  const [fabricDetails, setFabricDetails] =
+    useState<string[]>([""]);
 
-  const [cmUnits, setCmUnits] = useState<string[]>([""]);
+  const [fabricSuppliers, setFabricSuppliers] =
+    useState<string[]>([""]);
 
-  const [cmPrices, setCmPrices] = useState<string[]>(["0"]);
+  const [cmUnits, setCmUnits] =
+    useState<string[]>([""]);
 
-  const [customizations, setCustomizations] = useState<string[]>([""]);
+  const [cmPrices, setCmPrices] =
+    useState<string[]>(["0"]);
 
-  const [accessories, setAccessories] = useState<string[]>([""]);
+  const [customizations, setCustomizations] =
+    useState<string[]>([""]);
 
-  const [sizes, setSizes] = useState<Record<string, string>>(
-    Object.fromEntries(SIZES.map((size) => [size, ""])),
+  const [accessories, setAccessories] =
+    useState<string[]>([""]);
+
+  const [sizes, setSizes] = useState<
+    Record<string, string>
+  >(
+    Object.fromEntries(
+      SIZES.map((size) => [size, ""]),
+    ),
   );
 
   const [customSizes, setCustomSizes] = useState<
-    Array<{ label: string; quantity: string }>
+    Array<{
+      label: string;
+      quantity: string;
+    }>
   >([]);
 
   /*
-   * Reference/product images selected while the order is being created.
-   * They are uploaded only after the order row exists.
+   * Reference/product images.
    */
-  const [referenceImages, setReferenceImages] = useState<File[]>([]);
+  const [referenceImages, setReferenceImages] =
+    useState<File[]>([]);
 
   const [imagePreviews, setImagePreviews] = useState<
-    Array<{ file: File; url: string }>
+    Array<{
+      file: File;
+      url: string;
+    }>
   >([]);
 
   const { data: customers = [] } = useQuery({
     queryKey: ["customers", "list"],
+
     queryFn: async () => {
       const { data, error } = await supabase
         .from("customers")
-        .select("id, customer_code, customer_name, organization")
+        .select(
+          "id, customer_code, customer_name, organization",
+        )
         .order("customer_name");
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       return data;
     },
@@ -214,7 +254,9 @@ function NewOrderPage() {
   const sizeEntries = useMemo(() => {
     const entries: Record<string, number> = {};
 
-    for (const [size, value] of Object.entries(sizes)) {
+    for (const [size, value] of Object.entries(
+      sizes,
+    )) {
       const quantity = Number(value);
 
       if (quantity > 0) {
@@ -225,7 +267,10 @@ function NewOrderPage() {
     for (const row of customSizes) {
       const quantity = Number(row.quantity);
 
-      if (row.label.trim() && quantity > 0) {
+      if (
+        row.label.trim() &&
+        quantity > 0
+      ) {
         entries[row.label.trim()] = quantity;
       }
     }
@@ -233,7 +278,9 @@ function NewOrderPage() {
     return entries;
   }, [sizes, customSizes]);
 
-  const totalQuantity = Object.values(sizeEntries).reduce(
+  const totalQuantity = Object.values(
+    sizeEntries,
+  ).reduce(
     (sum, value) => sum + value,
     0,
   );
@@ -243,8 +290,9 @@ function NewOrderPage() {
   );
 
   /*
-   * Convert repeatable values into the existing database text fields.
+   * Convert repeatable values into database text fields.
    */
+
   const fabricDetailsValue = fabricDetails
     .map((value) => value.trim())
     .filter(Boolean)
@@ -271,75 +319,111 @@ function NewOrderPage() {
     .join(", ");
 
   /*
-   * Existing orders/order_items schema has one numeric unit_price field.
-   * Therefore the first CM price is used as the order's unit price.
+   * Existing orders/order_items schema has one
+   * numeric unit_price field.
+   *
+   * The first CM price is used as the order's
+   * main unit price.
    */
-  const primaryCmPrice = Number(cmPrices[0]) || 0;
+  const primaryCmPrice =
+    Number(cmPrices[0]) || 0;
 
   function addRepeatableField(
-    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    setter: Dispatch<SetStateAction<string[]>>,
     defaultValue = "",
   ) {
-    setter((current) => [...current, defaultValue]);
+    setter((current) => [
+      ...current,
+      defaultValue,
+    ]);
   }
 
   function removeRepeatableField(
-    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    setter: Dispatch<SetStateAction<string[]>>,
     index: number,
   ) {
     setter((current) => {
-      /*
-       * Keep at least one input available.
-       */
       if (current.length === 1) {
         return [""];
       }
 
-      return current.filter((_, itemIndex) => itemIndex !== index);
+      return current.filter(
+        (_, itemIndex) =>
+          itemIndex !== index,
+      );
     });
   }
 
   function updateRepeatableField(
-    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    setter: Dispatch<SetStateAction<string[]>>,
     index: number,
     value: string,
   ) {
     setter((current) =>
-      current.map((item, itemIndex) =>
-        itemIndex === index ? value : item,
+      current.map(
+        (item, itemIndex) =>
+          itemIndex === index
+            ? value
+            : item,
       ),
     );
   }
 
-  function addReferenceImages(event: ChangeEvent<HTMLInputElement>) {
-    const selectedFiles = Array.from(event.target.files ?? []);
+  function addReferenceImages(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const selectedFiles = Array.from(
+      event.target.files ?? [],
+    );
 
     event.currentTarget.value = "";
 
-    const imageFiles = selectedFiles.filter((file) =>
-      file.type.startsWith("image/"),
+    const imageFiles = selectedFiles.filter(
+      (file) =>
+        file.type.startsWith("image/"),
     );
 
-    if (imageFiles.length !== selectedFiles.length) {
-      toast.error("Only image files can be added.");
+    if (
+      imageFiles.length !==
+      selectedFiles.length
+    ) {
+      toast.error(
+        "Only image files can be added.",
+      );
     }
 
-    if (!imageFiles.length) return;
-
-    const available = Math.max(0, 6 - referenceImages.length);
-
-    const filesToAdd = imageFiles.slice(0, available);
-
-    if (filesToAdd.length < imageFiles.length) {
-      toast.error("You can add up to 6 reference images.");
+    if (!imageFiles.length) {
+      return;
     }
 
-    const nextPreviews = filesToAdd.map((file) => ({
-      file,
-      url: URL.createObjectURL(file),
-    }));
+    const available = Math.max(
+      0,
+      6 - referenceImages.length,
+    );
 
-    setReferenceImages((current) => [...current, ...filesToAdd]);
+    const filesToAdd =
+      imageFiles.slice(0, available);
+
+    if (
+      filesToAdd.length <
+      imageFiles.length
+    ) {
+      toast.error(
+        "You can add up to 6 reference images.",
+      );
+    }
+
+    const nextPreviews = filesToAdd.map(
+      (file) => ({
+        file,
+        url: URL.createObjectURL(file),
+      }),
+    );
+
+    setReferenceImages((current) => [
+      ...current,
+      ...filesToAdd,
+    ]);
 
     setImagePreviews((current) => [
       ...current,
@@ -347,31 +431,42 @@ function NewOrderPage() {
     ]);
   }
 
-  function removeReferenceImage(index: number) {
+  function removeReferenceImage(
+    index: number,
+  ) {
     setImagePreviews((current) => {
       const preview = current[index];
 
       if (preview) {
-        URL.revokeObjectURL(preview.url);
+        URL.revokeObjectURL(
+          preview.url,
+        );
       }
 
       return current.filter(
-        (_, itemIndex) => itemIndex !== index,
+        (_, itemIndex) =>
+          itemIndex !== index,
       );
     });
 
     setReferenceImages((current) =>
-      current.filter((_, itemIndex) => itemIndex !== index),
+      current.filter(
+        (_, itemIndex) =>
+          itemIndex !== index,
+      ),
     );
   }
 
   if (!canSell) {
     return (
       <div className="surface p-8 text-center">
-        <p className="font-medium">Sales access required</p>
+        <p className="font-medium">
+          Sales access required
+        </p>
 
         <p className="mt-1 text-sm text-muted-foreground">
-          Only sales staff and administrators can create orders.
+          Only sales staff and administrators
+          can create orders.
         </p>
       </div>
     );
@@ -379,15 +474,24 @@ function NewOrderPage() {
 
   async function createCustomer() {
     if (!newCustomer.customer_name.trim()) {
-      toast.error("Customer name is required");
+      toast.error(
+        "Customer name is required",
+      );
       return;
     }
 
+    /*
+     * Fixed email validation.
+     */
     if (
       newCustomer.email &&
-      !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(newCustomer.email)
+      !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(
+        newCustomer.email,
+      )
     ) {
-      toast.error("Enter a valid email address");
+      toast.error(
+        "Enter a valid email address",
+      );
       return;
     }
 
@@ -398,19 +502,22 @@ function NewOrderPage() {
       .slice(2, 7)
       .toUpperCase()}`;
 
-    const { data, error } = await supabase
-      .from("customers")
-      .insert({
-        ...newCustomer,
-        customer_code: code,
-      })
-      .select("id")
-      .single();
+    const { data, error } =
+      await supabase
+        .from("customers")
+        .insert({
+          ...newCustomer,
+          customer_code: code,
+        })
+        .select("id")
+        .single();
 
     setBusy(false);
 
     if (error) {
-      toast.error(friendlyError(error));
+      toast.error(
+        friendlyError(error),
+      );
       return;
     }
 
@@ -421,75 +528,118 @@ function NewOrderPage() {
     });
 
     setCustomerId(data.id);
-
     setCreatingCustomer(false);
   }
 
-  function validateStep(current: number): boolean {
-    if (current === 0 && !customerId) {
-      toast.error("Select or create a customer");
+  function validateStep(
+    current: number,
+  ): boolean {
+    if (
+      current === 0 &&
+      !customerId
+    ) {
+      toast.error(
+        "Select or create a customer",
+      );
       return false;
     }
 
     if (current === 1) {
-      if (!order.order_number.trim()) {
-        toast.error("Order number is required");
+      if (
+        !order.order_number.trim()
+      ) {
+        toast.error(
+          "Order number is required",
+        );
         return false;
       }
 
       if (
         order.expected_delivery_date &&
-        order.expected_delivery_date < order.order_date
+        order.expected_delivery_date <
+          order.order_date
       ) {
-        toast.error("Delivery date cannot be before the order date");
+        toast.error(
+          "Delivery date cannot be before the order date",
+        );
         return false;
       }
     }
 
-    if (current === 2 && !order.product_name.trim()) {
-      toast.error("Product name is required");
+    if (
+      current === 2 &&
+      !order.product_name.trim()
+    ) {
+      toast.error(
+        "Product name is required",
+      );
       return false;
     }
 
-    if (current === 3 && totalQuantity <= 0) {
-      toast.error("Enter at least one size quantity");
+    if (
+      current === 3 &&
+      totalQuantity <= 0
+    ) {
+      toast.error(
+        "Enter at least one size quantity",
+      );
       return false;
     }
 
     return true;
   }
 
-  async function saveReferenceImages(orderId: string) {
-    if (!user?.id || referenceImages.length === 0) return;
+  async function saveReferenceImages(
+    orderId: string,
+  ) {
+    if (
+      !user?.id ||
+      referenceImages.length === 0
+    ) {
+      return;
+    }
 
     const failedFiles: string[] = [];
 
     for (const file of referenceImages) {
       try {
         const extension =
-          file.name.split(".").pop()?.toLowerCase() || "jpg";
+          file.name
+            .split(".")
+            .pop()
+            ?.toLowerCase() || "jpg";
 
-        const safeExtension = /^[a-z0-9]+$/.test(extension)
-          ? extension
-          : "jpg";
+        const safeExtension =
+          /^[a-z0-9]+$/.test(extension)
+            ? extension
+            : "jpg";
 
         const path = `${orderId}/reference-${crypto.randomUUID()}.${safeExtension}`;
 
-        const { error: uploadError } = await supabase.storage
+        const {
+          error: uploadError,
+        } = await supabase.storage
           .from("production-images")
           .upload(path, file, {
             cacheControl: "3600",
             upsert: false,
-            contentType: file.type || "image/jpeg",
+            contentType:
+              file.type ||
+              "image/jpeg",
           });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          throw uploadError;
+        }
 
-        const { error: rowError } = await supabase
+        const {
+          error: rowError,
+        } = await supabase
           .from("production_images")
           .insert({
             order_id: orderId,
-            stage: "fabric_procurement" as never,
+            stage:
+              "fabric_procurement" as never,
             image_path: path,
             description: `Reference image - ${file.name}`,
             uploaded_by: user.id,
@@ -503,7 +653,10 @@ function NewOrderPage() {
           throw rowError;
         }
       } catch (error) {
-        console.error("Reference image upload failed:", error);
+        console.error(
+          "Reference image upload failed:",
+          error,
+        );
 
         failedFiles.push(file.name);
       }
@@ -512,13 +665,19 @@ function NewOrderPage() {
     if (failedFiles.length > 0) {
       throw new Error(
         `Order was created, but ${failedFiles.length} reference image${
-          failedFiles.length === 1 ? "" : "s"
-        } could not be saved: ${failedFiles.join(", ")}`,
+          failedFiles.length === 1
+            ? ""
+            : "s"
+        } could not be saved: ${failedFiles.join(
+          ", ",
+        )}`,
       );
     }
   }
 
-  async function submit(status: "draft" | "confirmed") {
+  async function submit(
+    status: "draft" | "confirmed",
+  ) {
     if (
       !validateStep(0) ||
       !validateStep(1) ||
@@ -531,39 +690,51 @@ function NewOrderPage() {
     setBusy(true);
 
     /*
-     * Use the first CM price as the existing order unit_price.
+     * Use the first CM price as the
+     * existing order unit_price.
      */
-    const unitPrice = primaryCmPrice;
+    const unitPrice =
+      primaryCmPrice;
 
     const orderPayload = {
-      order_number: order.order_number.trim(),
+      order_number:
+        order.order_number.trim(),
 
       /*
-       * Batch number has intentionally been removed.
+       * Batch number intentionally removed.
        */
 
       customer_id: customerId,
 
-      created_by: user?.id ?? null,
+      created_by:
+        user?.id ?? null,
 
-      order_date: order.order_date,
+      order_date:
+        order.order_date,
 
       expected_delivery_date:
-        order.expected_delivery_date || null,
+        order.expected_delivery_date ||
+        null,
 
       status,
 
-      priority: order.priority as never,
+      priority:
+        order.priority as never,
 
-      product_name: order.product_name.trim(),
+      product_name:
+        order.product_name.trim(),
 
       /*
-       * Existing database field retained for compatibility.
-       * It now stores the selected sleeve type.
+       * Existing database field retained
+       * for compatibility.
+       *
+       * It stores the selected sleeve type.
        */
-      product_category: order.product_category,
+      product_category:
+        order.product_category,
 
-      total_quantity: totalQuantity,
+      total_quantity:
+        totalQuantity,
 
       fabric_details:
         fabricDetailsValue || null,
@@ -581,27 +752,37 @@ function NewOrderPage() {
         customizationValue || null,
 
       special_instructions:
-        order.special_instructions || null,
+        order.special_instructions ||
+        null,
 
       remarks:
         order.remarks || null,
     } as any;
 
-    const { data, error } = await supabase
+    const {
+      data,
+      error,
+    } = await supabase
       .from("orders")
       .insert(orderPayload)
-      .select("id, order_number")
+      .select(
+        "id, order_number",
+      )
       .single();
 
     if (error) {
       setBusy(false);
 
-      toast.error(friendlyError(error));
+      toast.error(
+        friendlyError(error),
+      );
 
       return;
     }
 
-    const { error: itemError } = await supabase
+    const {
+      error: itemError,
+    } = await supabase
       .from("order_items")
       .insert({
         order_id: data.id,
@@ -619,30 +800,40 @@ function NewOrderPage() {
           unitPrice,
 
         total_price:
-          unitPrice * totalQuantity,
+          unitPrice *
+          totalQuantity,
 
         fabric:
-          fabricDetailsValue || null,
+          fabricDetailsValue ||
+          null,
 
         color:
           order.color || null,
 
         customization:
-          customizationValue || null,
+          customizationValue ||
+          null,
 
         size_quantities:
           sizeEntries as never,
       });
 
     if (itemError) {
-      toast.error(friendlyError(itemError));
+      toast.error(
+        friendlyError(itemError),
+      );
     }
 
-    let imageSaveError: unknown = null;
+    let imageSaveError:
+      unknown = null;
 
-    if (referenceImages.length > 0) {
+    if (
+      referenceImages.length > 0
+    ) {
       try {
-        await saveReferenceImages(data.id);
+        await saveReferenceImages(
+          data.id,
+        );
       } catch (error) {
         imageSaveError = error;
       }
@@ -652,17 +843,26 @@ function NewOrderPage() {
       orderId: data.id,
 
       action: `Order ${
-        status === "draft" ? "saved as draft" : "created"
-      } by ${profile?.full_name ?? "staff"}`,
+        status === "draft"
+          ? "saved as draft"
+          : "created"
+      } by ${
+        profile?.full_name ??
+        "staff"
+      }`,
 
-      actorId: user?.id ?? null,
+      actorId:
+        user?.id ?? null,
 
-      actorName: profile?.full_name ?? null,
+      actorName:
+        profile?.full_name ??
+        null,
     });
 
     if (status === "confirmed") {
       await notifyStaff({
-        title: "New order confirmed",
+        title:
+          "New order confirmed",
 
         message: `${data.order_number} · ${order.product_name} (${totalQuantity} pcs)`,
 
@@ -672,13 +872,17 @@ function NewOrderPage() {
       });
     }
 
-    await queryClient.invalidateQueries({
-      queryKey: ["orders"],
-    });
+    await queryClient.invalidateQueries(
+      {
+        queryKey: ["orders"],
+      },
+    );
 
-    await queryClient.invalidateQueries({
-      queryKey: ["dashboard"],
-    });
+    await queryClient.invalidateQueries(
+      {
+        queryKey: ["dashboard"],
+      },
+    );
 
     setBusy(false);
 
@@ -712,55 +916,75 @@ function NewOrderPage() {
       />
 
       <ol className="mb-6 flex flex-wrap gap-2">
-        {STEPS.map((label, index) => (
-          <li key={label}>
-            <button
-              type="button"
-              onClick={() =>
-                index < step && setStep(index)
-              }
-              className={
-                index === step
-                  ? "rounded-full border border-accent bg-accent/15 px-3 py-1 text-xs font-medium text-accent-foreground"
-                  : index < step
-                    ? "rounded-full border px-3 py-1 text-xs text-muted-foreground"
-                    : "rounded-full border border-dashed px-3 py-1 text-xs text-muted-foreground/60"
-              }
-            >
-              {index < step ? (
-                <Check className="mr-1 inline h-3 w-3" />
-              ) : null}
+        {STEPS.map(
+          (label, index) => (
+            <li key={label}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (index < step) {
+                    setStep(index);
+                  }
+                }}
+                className={
+                  index === step
+                    ? "rounded-full border border-accent bg-accent/15 px-3 py-1 text-xs font-medium text-accent-foreground"
+                    : index < step
+                      ? "rounded-full border px-3 py-1 text-xs text-muted-foreground"
+                      : "rounded-full border border-dashed px-3 py-1 text-xs text-muted-foreground/60"
+                }
+              >
+                {index < step ? (
+                  <Check className="mr-1 inline h-3 w-3" />
+                ) : null}
 
-              {index + 1}. {label}
-            </button>
-          </li>
-        ))}
+                {index + 1}. {label}
+              </button>
+            </li>
+          ),
+        )}
       </ol>
 
       <div className="surface p-5">
+        {/* STEP 0 — CUSTOMER */}
         {step === 0 ? (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Existing customer</Label>
+              <Label>
+                Existing customer
+              </Label>
 
               <Select
                 value={customerId}
-                onValueChange={setCustomerId}
+                onValueChange={
+                  setCustomerId
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Search and select a customer" />
                 </SelectTrigger>
 
                 <SelectContent>
-                  {customers.map((customer) => (
-                    <SelectItem
-                      key={customer.id}
-                      value={customer.id}
-                    >
-                      {customer.customer_name} ·{" "}
-                      {customer.customer_code}
-                    </SelectItem>
-                  ))}
+                  {customers.map(
+                    (customer) => (
+                      <SelectItem
+                        key={
+                          customer.id
+                        }
+                        value={
+                          customer.id
+                        }
+                      >
+                        {
+                          customer.customer_name
+                        }{" "}
+                        ·{" "}
+                        {
+                          customer.customer_code
+                        }
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -770,7 +994,9 @@ function NewOrderPage() {
                 variant="outline"
                 size="sm"
                 onClick={() =>
-                  setCreatingCustomer(true)
+                  setCreatingCustomer(
+                    true,
+                  )
                 }
               >
                 + New customer
@@ -780,35 +1006,71 @@ function NewOrderPage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   {(
                     [
-                      ["customer_name", "Customer name"],
-                      ["organization", "Organization"],
-                      ["phone", "Phone"],
-                      ["email", "Email"],
-                      ["city", "City"],
-                      ["state", "State"],
+                      [
+                        "customer_name",
+                        "Customer name",
+                      ],
+                      [
+                        "organization",
+                        "Organization",
+                      ],
+                      [
+                        "phone",
+                        "Phone",
+                      ],
+                      [
+                        "email",
+                        "Email",
+                      ],
+                      [
+                        "city",
+                        "City",
+                      ],
+                      [
+                        "state",
+                        "State",
+                      ],
                     ] as const
-                  ).map(([field, label]) => (
-                    <div
-                      key={field}
-                      className="space-y-1.5"
-                    >
-                      <Label htmlFor={field}>
-                        {label}
-                      </Label>
+                  ).map(
+                    ([field, label]) => (
+                      <div
+                        key={field}
+                        className="space-y-1.5"
+                      >
+                        <Label
+                          htmlFor={
+                            field
+                          }
+                        >
+                          {label}
+                        </Label>
 
-                      <Input
-                        id={field}
-                        value={newCustomer[field]}
-                        onChange={(event) =>
-                          setNewCustomer((current) => ({
-                            ...current,
-                            [field]:
-                              event.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  ))}
+                        <Input
+                          id={field}
+                          value={
+                            newCustomer[
+                              field
+                            ]
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setNewCustomer(
+                              (
+                                current,
+                              ) => ({
+                                ...current,
+                                [field]:
+                                  event
+                                    .target
+                                    .value,
+                              }),
+                            )
+                          }
+                        />
+                      </div>
+                    ),
+                  )}
                 </div>
 
                 <div className="mt-3 space-y-1.5">
@@ -818,13 +1080,21 @@ function NewOrderPage() {
 
                   <Textarea
                     id="address"
-                    value={newCustomer.address}
-                    onChange={(event) =>
-                      setNewCustomer((current) => ({
-                        ...current,
-                        address:
-                          event.target.value,
-                      }))
+                    value={
+                      newCustomer.address
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setNewCustomer(
+                        (current) => ({
+                          ...current,
+                          address:
+                            event
+                              .target
+                              .value,
+                        }),
+                      )
                     }
                   />
                 </div>
@@ -832,7 +1102,9 @@ function NewOrderPage() {
                 <div className="mt-3 flex gap-2">
                   <Button
                     size="sm"
-                    onClick={createCustomer}
+                    onClick={
+                      createCustomer
+                    }
                     disabled={busy}
                   >
                     Save customer
@@ -842,7 +1114,9 @@ function NewOrderPage() {
                     size="sm"
                     variant="ghost"
                     onClick={() =>
-                      setCreatingCustomer(false)
+                      setCreatingCustomer(
+                        false,
+                      )
                     }
                   >
                     Cancel
@@ -853,6 +1127,7 @@ function NewOrderPage() {
           </div>
         ) : null}
 
+        {/* STEP 1 — ORDER INFO */}
         {step === 1 ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -862,19 +1137,26 @@ function NewOrderPage() {
 
               <Input
                 id="order_number"
-                value={order.order_number}
+                value={
+                  order.order_number
+                }
                 onChange={(event) =>
-                  setOrder((current) => ({
-                    ...current,
-                    order_number:
-                      event.target.value,
-                  }))
+                  setOrder(
+                    (current) => ({
+                      ...current,
+                      order_number:
+                        event.target
+                          .value,
+                    }),
+                  )
                 }
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label>Time captured</Label>
+              <Label>
+                Time captured
+              </Label>
 
               <Input
                 value={formatCapturedTime(
@@ -885,7 +1167,9 @@ function NewOrderPage() {
               />
 
               <p className="text-xs text-muted-foreground">
-                Automatically captured when this order was started.
+                Automatically captured
+                when this order was
+                started.
               </p>
             </div>
 
@@ -897,13 +1181,18 @@ function NewOrderPage() {
               <Input
                 id="order_date"
                 type="date"
-                value={order.order_date}
+                value={
+                  order.order_date
+                }
                 onChange={(event) =>
-                  setOrder((current) => ({
-                    ...current,
-                    order_date:
-                      event.target.value,
-                  }))
+                  setOrder(
+                    (current) => ({
+                      ...current,
+                      order_date:
+                        event.target
+                          .value,
+                    }),
+                  )
                 }
               />
             </div>
@@ -920,25 +1209,35 @@ function NewOrderPage() {
                   order.expected_delivery_date
                 }
                 onChange={(event) =>
-                  setOrder((current) => ({
-                    ...current,
-                    expected_delivery_date:
-                      event.target.value,
-                  }))
+                  setOrder(
+                    (current) => ({
+                      ...current,
+                      expected_delivery_date:
+                        event.target
+                          .value,
+                    }),
+                  )
                 }
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label>Priority</Label>
+              <Label>
+                Priority
+              </Label>
 
               <Select
                 value={order.priority}
-                onValueChange={(value) =>
-                  setOrder((current) => ({
-                    ...current,
-                    priority: value,
-                  }))
+                onValueChange={(
+                  value,
+                ) =>
+                  setOrder(
+                    (current) => ({
+                      ...current,
+                      priority:
+                        value,
+                    }),
+                  )
                 }
               >
                 <SelectTrigger>
@@ -946,20 +1245,25 @@ function NewOrderPage() {
                 </SelectTrigger>
 
                 <SelectContent>
-                  {PRIORITIES.map((value) => (
-                    <SelectItem
-                      key={value}
-                      value={value}
-                    >
-                      {titleize(value)}
-                    </SelectItem>
-                  ))}
+                  {PRIORITIES.map(
+                    (value) => (
+                      <SelectItem
+                        key={value}
+                        value={value}
+                      >
+                        {titleize(
+                          value,
+                        )}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>
           </div>
         ) : null}
 
+        {/* STEP 2 — PRODUCT */}
         {step === 2 ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -969,28 +1273,41 @@ function NewOrderPage() {
 
               <Input
                 id="product_name"
-                value={order.product_name}
+                value={
+                  order.product_name
+                }
                 onChange={(event) =>
-                  setOrder((current) => ({
-                    ...current,
-                    product_name:
-                      event.target.value,
-                  }))
+                  setOrder(
+                    (current) => ({
+                      ...current,
+                      product_name:
+                        event.target
+                          .value,
+                    }),
+                  )
                 }
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label>Sleeve type</Label>
+              <Label>
+                Sleeve type
+              </Label>
 
               <Select
-                value={order.product_category}
-                onValueChange={(value) =>
-                  setOrder((current) => ({
-                    ...current,
-                    product_category:
-                      value,
-                  }))
+                value={
+                  order.product_category
+                }
+                onValueChange={(
+                  value,
+                ) =>
+                  setOrder(
+                    (current) => ({
+                      ...current,
+                      product_category:
+                        value,
+                    }),
+                  )
                 }
               >
                 <SelectTrigger>
@@ -998,14 +1315,16 @@ function NewOrderPage() {
                 </SelectTrigger>
 
                 <SelectContent>
-                  {SLEEVE_TYPES.map((value) => (
-                    <SelectItem
-                      key={value}
-                      value={value}
-                    >
-                      {value}
-                    </SelectItem>
-                  ))}
+                  {SLEEVE_TYPES.map(
+                    (value) => (
+                      <SelectItem
+                        key={value}
+                        value={value}
+                      >
+                        {value}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -1013,7 +1332,9 @@ function NewOrderPage() {
             {/* FABRIC DETAILS */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Fabric details</Label>
+                <Label>
+                  Fabric details
+                </Label>
 
                 <Button
                   type="button"
@@ -1045,16 +1366,20 @@ function NewOrderPage() {
                           ? "Enter fabric details"
                           : "Add another fabric"
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event,
+                      ) =>
                         updateRepeatableField(
                           setFabricDetails,
                           index,
-                          event.target.value,
+                          event.target
+                            .value,
                         )
                       }
                     />
 
-                    {fabricDetails.length > 1 ? (
+                    {fabricDetails.length >
+                    1 ? (
                       <Button
                         type="button"
                         variant="ghost"
@@ -1071,14 +1396,16 @@ function NewOrderPage() {
                       </Button>
                     ) : null}
                   </div>
-                )
+                ),
               )}
             </div>
 
             {/* FABRIC SUPPLIER */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Fabric supplier</Label>
+                <Label>
+                  Fabric supplier
+                </Label>
 
                 <Button
                   type="button"
@@ -1110,16 +1437,20 @@ function NewOrderPage() {
                           ? "Enter fabric supplier"
                           : "Add another supplier"
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event,
+                      ) =>
                         updateRepeatableField(
                           setFabricSuppliers,
                           index,
-                          event.target.value,
+                          event.target
+                            .value,
                         )
                       }
                     />
 
-                    {fabricSuppliers.length > 1 ? (
+                    {fabricSuppliers.length >
+                    1 ? (
                       <Button
                         type="button"
                         variant="ghost"
@@ -1136,14 +1467,16 @@ function NewOrderPage() {
                       </Button>
                     ) : null}
                   </div>
-                )
+                ),
               )}
             </div>
 
             {/* CM UNIT */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>CM unit</Label>
+                <Label>
+                  CM unit
+                </Label>
 
                 <Button
                   type="button"
@@ -1175,16 +1508,20 @@ function NewOrderPage() {
                           ? "Enter CM unit"
                           : "Add another CM unit"
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event,
+                      ) =>
                         updateRepeatableField(
                           setCmUnits,
                           index,
-                          event.target.value,
+                          event.target
+                            .value,
                         )
                       }
                     />
 
-                    {cmUnits.length > 1 ? (
+                    {cmUnits.length >
+                    1 ? (
                       <Button
                         type="button"
                         variant="ghost"
@@ -1201,7 +1538,7 @@ function NewOrderPage() {
                       </Button>
                     ) : null}
                   </div>
-                )
+                ),
               )}
             </div>
 
@@ -1215,10 +1552,14 @@ function NewOrderPage() {
                 id="color"
                 value={order.color}
                 onChange={(event) =>
-                  setOrder((current) => ({
-                    ...current,
-                    color: event.target.value,
-                  }))
+                  setOrder(
+                    (current) => ({
+                      ...current,
+                      color: event
+                        .target
+                        .value,
+                    }),
+                  )
                 }
               />
             </div>
@@ -1226,7 +1567,9 @@ function NewOrderPage() {
             {/* ACCESSORIES */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Accessories</Label>
+                <Label>
+                  Accessories
+                </Label>
 
                 <Button
                   type="button"
@@ -1258,16 +1601,20 @@ function NewOrderPage() {
                           ? "Enter accessories"
                           : "Add another accessory"
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event,
+                      ) =>
                         updateRepeatableField(
                           setAccessories,
                           index,
-                          event.target.value,
+                          event.target
+                            .value,
                         )
                       }
                     />
 
-                    {accessories.length > 1 ? (
+                    {accessories.length >
+                    1 ? (
                       <Button
                         type="button"
                         variant="ghost"
@@ -1284,14 +1631,16 @@ function NewOrderPage() {
                       </Button>
                     ) : null}
                   </div>
-                )
+                ),
               )}
             </div>
 
             {/* CUSTOMIZATION */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Customization</Label>
+                <Label>
+                  Customization
+                </Label>
 
                 <Button
                   type="button"
@@ -1323,16 +1672,20 @@ function NewOrderPage() {
                           ? "Enter customization"
                           : "Add another customization"
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event,
+                      ) =>
                         updateRepeatableField(
                           setCustomizations,
                           index,
-                          event.target.value,
+                          event.target
+                            .value,
                         )
                       }
                     />
 
-                    {customizations.length > 1 ? (
+                    {customizations.length >
+                    1 ? (
                       <Button
                         type="button"
                         variant="ghost"
@@ -1349,14 +1702,16 @@ function NewOrderPage() {
                       </Button>
                     ) : null}
                   </div>
-                )
+                ),
               )}
             </div>
 
             {/* CM PRICE */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>CM Price (AED)</Label>
+                <Label>
+                  CM Price (AED)
+                </Label>
 
                 <Button
                   type="button"
@@ -1392,16 +1747,20 @@ function NewOrderPage() {
                           ? "Enter CM price"
                           : "Add another CM price"
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event,
+                      ) =>
                         updateRepeatableField(
                           setCmPrices,
                           index,
-                          event.target.value,
+                          event.target
+                            .value,
                         )
                       }
                     />
 
-                    {cmPrices.length > 1 ? (
+                    {cmPrices.length >
+                    1 ? (
                       <Button
                         type="button"
                         variant="ghost"
@@ -1418,19 +1777,22 @@ function NewOrderPage() {
                       </Button>
                     ) : null}
                   </div>
-                )
+                ),
               )}
 
-              {cmPrices.length > 1 ? (
+              {cmPrices.length >
+              1 ? (
                 <p className="text-xs text-muted-foreground">
-                  The first CM price is used as the
-                  order's main unit price.
+                  The first CM price is
+                  used as the order's
+                  main unit price.
                 </p>
               ) : null}
             </div>
           </div>
         ) : null}
 
+        {/* STEP 3 — SIZES */}
         {step === 3 ? (
           <div>
             <div className="grid gap-3 sm:grid-cols-4">
@@ -1439,7 +1801,9 @@ function NewOrderPage() {
                   key={size}
                   className="space-y-1.5"
                 >
-                  <Label htmlFor={`size-${size}`}>
+                  <Label
+                    htmlFor={`size-${size}`}
+                  >
                     {size}
                   </Label>
 
@@ -1447,13 +1811,19 @@ function NewOrderPage() {
                     id={`size-${size}`}
                     type="number"
                     min="0"
-                    value={sizes[size] ?? ""}
+                    value={
+                      sizes[size] ??
+                      ""
+                    }
                     onChange={(event) =>
-                      setSizes((current) => ({
-                        ...current,
-                        [size]:
-                          event.target.value,
-                      }))
+                      setSizes(
+                        (current) => ({
+                          ...current,
+                          [size]:
+                            event.target
+                              .value,
+                        }),
+                      )
                     }
                   />
                 </div>
@@ -1469,7 +1839,9 @@ function NewOrderPage() {
                   <Input
                     placeholder="Custom size label"
                     value={row.label}
-                    onChange={(event) =>
+                    onChange={(
+                      event,
+                    ) =>
                       setCustomSizes(
                         (current) =>
                           current.map(
@@ -1482,7 +1854,8 @@ function NewOrderPage() {
                                 ? {
                                     ...item,
                                     label:
-                                      event.target
+                                      event
+                                        .target
                                         .value,
                                   }
                                 : item,
@@ -1495,8 +1868,12 @@ function NewOrderPage() {
                     type="number"
                     min="0"
                     placeholder="Qty"
-                    value={row.quantity}
-                    onChange={(event) =>
+                    value={
+                      row.quantity
+                    }
+                    onChange={(
+                      event,
+                    ) =>
                       setCustomSizes(
                         (current) =>
                           current.map(
@@ -1509,7 +1886,8 @@ function NewOrderPage() {
                                 ? {
                                     ...item,
                                     quantity:
-                                      event.target
+                                      event
+                                        .target
                                         .value,
                                   }
                                 : item,
@@ -1550,6 +1928,7 @@ function NewOrderPage() {
           </div>
         ) : null}
 
+        {/* STEP 4 — ADDITIONAL */}
         {step === 4 ? (
           <div className="space-y-5">
             <div className="space-y-1.5">
@@ -1560,13 +1939,18 @@ function NewOrderPage() {
               <Textarea
                 id="instructions"
                 rows={3}
-                value={order.special_instructions}
+                value={
+                  order.special_instructions
+                }
                 onChange={(event) =>
-                  setOrder((current) => ({
-                    ...current,
-                    special_instructions:
-                      event.target.value,
-                  }))
+                  setOrder(
+                    (current) => ({
+                      ...current,
+                      special_instructions:
+                        event.target
+                          .value,
+                    }),
+                  )
                 }
               />
             </div>
@@ -1579,13 +1963,18 @@ function NewOrderPage() {
               <Textarea
                 id="remarks"
                 rows={3}
-                value={order.remarks}
+                value={
+                  order.remarks
+                }
                 onChange={(event) =>
-                  setOrder((current) => ({
-                    ...current,
-                    remarks:
-                      event.target.value,
-                  }))
+                  setOrder(
+                    (current) => ({
+                      ...current,
+                      remarks:
+                        event.target
+                          .value,
+                    }),
+                  )
                 }
               />
             </div>
@@ -1602,14 +1991,17 @@ function NewOrderPage() {
                   </div>
 
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Add up to 6 images. They will be
-                    saved to the order and included in
-                    the Order Sheet PDF.
+                    Add up to 6 images.
+                    They will be saved
+                    to the order and
+                    included in the
+                    Order Sheet PDF.
                   </p>
                 </div>
 
                 <span className="text-xs text-muted-foreground">
-                  {referenceImages.length}/6
+                  {referenceImages.length}
+                  /6
                 </span>
               </div>
 
@@ -1618,8 +2010,8 @@ function NewOrderPage() {
                 className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed p-6 text-sm text-muted-foreground transition hover:bg-muted/50"
               >
                 <ImagePlus className="mr-2 h-5 w-5" />
-
-                Click to add reference images
+                Click to add reference
+                images
               </label>
 
               <Input
@@ -1629,23 +2021,34 @@ function NewOrderPage() {
                 multiple
                 className="hidden"
                 disabled={
-                  referenceImages.length >= 6 ||
-                  busy
+                  referenceImages.length >=
+                    6 || busy
                 }
-                onChange={addReferenceImages}
+                onChange={
+                  addReferenceImages
+                }
               />
 
-              {imagePreviews.length > 0 ? (
+              {imagePreviews.length >
+              0 ? (
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {imagePreviews.map(
-                    (preview, index) => (
+                    (
+                      preview,
+                      index,
+                    ) => (
                       <div
                         key={`${preview.file.name}-${index}`}
                         className="group relative overflow-hidden rounded-lg border"
                       >
                         <img
-                          src={preview.url}
-                          alt={preview.file.name}
+                          src={
+                            preview.url
+                          }
+                          alt={
+                            preview.file
+                              .name
+                          }
                           className="aspect-square w-full object-cover"
                         />
 
@@ -1663,7 +2066,10 @@ function NewOrderPage() {
                         </button>
 
                         <div className="truncate border-t bg-background px-2 py-1.5 text-[11px]">
-                          {preview.file.name}
+                          {
+                            preview.file
+                              .name
+                          }
                         </div>
                       </div>
                     ),
@@ -1671,13 +2077,15 @@ function NewOrderPage() {
                 </div>
               ) : (
                 <p className="mt-3 text-center text-xs text-muted-foreground">
-                  No reference images selected yet.
+                  No reference images
+                  selected yet.
                 </p>
               )}
             </div>
           </div>
         ) : null}
 
+        {/* STEP 5 — REVIEW */}
         {step === 5 ? (
           <div className="space-y-4 text-sm">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -1687,13 +2095,17 @@ function NewOrderPage() {
                 </p>
 
                 <p className="mt-1 font-medium">
-                  {selectedCustomer?.customer_name ??
-                    "—"}
+                  {
+                    selectedCustomer?.customer_name ??
+                    "—"
+                  }
                 </p>
 
                 <p className="text-muted-foreground">
-                  {selectedCustomer?.organization ??
-                    ""}
+                  {
+                    selectedCustomer?.organization ??
+                    ""
+                  }
                 </p>
               </div>
 
@@ -1703,11 +2115,16 @@ function NewOrderPage() {
                 </p>
 
                 <p className="mt-1 font-medium">
-                  {order.order_number}
+                  {
+                    order.order_number
+                  }
                 </p>
 
                 <p className="text-muted-foreground">
-                  {titleize(order.priority)} priority
+                  {titleize(
+                    order.priority,
+                  )}{" "}
+                  priority
                 </p>
 
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1726,12 +2143,16 @@ function NewOrderPage() {
                 </p>
 
                 <p className="mt-1 font-medium">
-                  {order.product_name}
+                  {
+                    order.product_name
+                  }
                 </p>
 
                 <p className="text-muted-foreground">
                   Sleeve type:{" "}
-                  {order.product_category}
+                  {
+                    order.product_category
+                  }
                 </p>
 
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1748,7 +2169,8 @@ function NewOrderPage() {
 
                 <p className="mt-1 text-xs text-muted-foreground">
                   CM unit:{" "}
-                  {cmUnitValue || "—"}
+                  {cmUnitValue ||
+                    "—"}
                 </p>
 
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1756,9 +2178,11 @@ function NewOrderPage() {
                   {cmPrices
                     .filter(
                       (value) =>
-                        value.trim() !== "",
+                        value.trim() !==
+                        "",
                     )
-                    .join(", ") || "—"}
+                    .join(", ") ||
+                    "—"}
                 </p>
 
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1780,12 +2204,17 @@ function NewOrderPage() {
                 </p>
 
                 <p className="mt-1 font-medium">
-                  {order.expected_delivery_date ||
-                    "Not set"}
+                  {
+                    order.expected_delivery_date ||
+                    "Not set"
+                  }
                 </p>
 
                 <p className="text-muted-foreground">
-                  Ordered {order.order_date}
+                  Ordered{" "}
+                  {
+                    order.order_date
+                  }
                 </p>
               </div>
             </div>
@@ -1796,8 +2225,13 @@ function NewOrderPage() {
               </p>
 
               <div className="flex flex-wrap gap-2">
-                {Object.entries(sizeEntries).map(
-                  ([size, quantity]) => (
+                {Object.entries(
+                  sizeEntries,
+                ).map(
+                  ([
+                    size,
+                    quantity,
+                  ]) => (
                     <span
                       key={size}
                       className="rounded-md border px-2.5 py-1 text-xs"
@@ -1813,7 +2247,9 @@ function NewOrderPage() {
 
               <p className="mt-2">
                 Total:{" "}
-                <strong>{totalQuantity}</strong>{" "}
+                <strong>
+                  {totalQuantity}
+                </strong>{" "}
                 pieces
               </p>
             </div>
@@ -1824,9 +2260,11 @@ function NewOrderPage() {
               </p>
 
               <p className="text-muted-foreground">
-                {referenceImages.length > 0
+                {referenceImages.length >
+                0
                   ? `${referenceImages.length} image${
-                      referenceImages.length === 1
+                      referenceImages.length ===
+                      1
                         ? ""
                         : "s"
                     } will be saved with the order and included in the PDF.`
@@ -1836,26 +2274,36 @@ function NewOrderPage() {
           </div>
         ) : null}
 
+        {/* NAVIGATION */}
         <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t pt-4">
           <Button
             variant="ghost"
             onClick={() =>
               step === 0
-                ? navigate({ to: "/orders" })
-                : setStep(step - 1)
+                ? navigate({
+                    to: "/orders",
+                  })
+                : setStep(
+                    step - 1,
+                  )
             }
             disabled={busy}
           >
-            {step === 0 ? "Cancel" : "Back"}
+            {step === 0
+              ? "Cancel"
+              : "Back"}
           </Button>
 
           <div className="flex gap-2">
-            {step === STEPS.length - 1 ? (
+            {step ===
+            STEPS.length - 1 ? (
               <>
                 <Button
                   variant="outline"
                   onClick={() =>
-                    void submit("draft")
+                    void submit(
+                      "draft",
+                    )
                   }
                   disabled={busy}
                 >
@@ -1864,7 +2312,9 @@ function NewOrderPage() {
 
                 <Button
                   onClick={() =>
-                    void submit("confirmed")
+                    void submit(
+                      "confirmed",
+                    )
                   }
                   disabled={busy}
                 >
@@ -1878,8 +2328,14 @@ function NewOrderPage() {
             ) : (
               <Button
                 onClick={() => {
-                  if (validateStep(step)) {
-                    setStep(step + 1);
+                  if (
+                    validateStep(
+                      step,
+                    )
+                  ) {
+                    setStep(
+                      step + 1,
+                    );
                   }
                 }}
                 disabled={busy}
