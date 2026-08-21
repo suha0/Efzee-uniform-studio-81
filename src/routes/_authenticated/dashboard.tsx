@@ -159,17 +159,36 @@ function DashboardPage() {
     value,
   }));
 
-  const overTime = Object.entries(
-  orders.reduce<Record<string, number>>((accumulator, order) => {
-    const key = new Date(order.order_date).toLocaleDateString("en-GB", {
-      month: "short",
-      year: "2-digit",
-    });
-    accumulator[key] = (accumulator[key] ?? 0) + 1;
-    return accumulator;
-  }, {}),
-).map(([name, orders_count]) => ({ name, orders: orders_count }));
+  const overTimeMap = orders.reduce<Record<string, number>>(
+  (accumulator, order) => {
+    const date = new Date(order.order_date);
 
+    if (Number.isNaN(date.getTime())) {
+      return accumulator;
+    }
+
+    const key = date.toISOString().split("T")[0];
+
+    if (!key) {
+      return accumulator;
+    }
+
+    accumulator[key] = (accumulator[key] ?? 0) + 1;
+
+    return accumulator;
+  },
+  {},
+);
+
+const overTime = Object.keys(overTimeMap)
+  .sort((dateA, dateB) => dateA.localeCompare(dateB))
+  .map((date) => ({
+    name: new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+    }),
+    orders: overTimeMap[date] ?? 0,
+  }));
   const blockedStages = stages.filter((stage) => stage.status === "blocked");
   const overdueOrders = orders.filter(isOverdue);
   const upcoming = orders
