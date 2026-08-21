@@ -198,6 +198,27 @@ function NewOrderPage() {
   const [cmPrices, setCmPrices] =
     useState<string[]>(["0"]);
 
+  /* Additional costing fields.
+   * These remain client-side so the existing Supabase schema and
+   * order creation flow are not changed.
+   */
+  const [embroideryUnits, setEmbroideryUnits] =
+    useState<string[]>(["0"]);
+  const [consumptions, setConsumptions] =
+    useState<string[]>(["0"]);
+  const [fabricMaterialCosts, setFabricMaterialCosts] =
+    useState<string[]>(["0"]);
+  const [embroideryPrintCosts, setEmbroideryPrintCosts] =
+    useState<string[]>(["0"]);
+  const [transportationCosts, setTransportationCosts] =
+    useState<string[]>(["0"]);
+  const [marginPercent, setMarginPercent] =
+    useState("0");
+  const [vatPercent, setVatPercent] =
+    useState("0");
+  const [discount, setDiscount] =
+    useState("0");
+
   const [customizations, setCustomizations] =
     useState<string[]>([""]);
 
@@ -327,6 +348,46 @@ function NewOrderPage() {
    */
   const primaryCmPrice =
     Number(cmPrices[0]) || 0;
+
+  const sumNumericFields = (values: string[]) =>
+    values.reduce((sum, value) => {
+      const numericValue = Number(value);
+      return sum + (Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0);
+    }, 0);
+
+  const embroideryUnitTotal = sumNumericFields(embroideryUnits);
+  const consumptionTotal = sumNumericFields(consumptions);
+  const fabricMaterialTotal = sumNumericFields(fabricMaterialCosts);
+  const embroideryPrintTotal = sumNumericFields(embroideryPrintCosts);
+  const transportationTotal = sumNumericFields(transportationCosts);
+
+  const totalCost =
+    primaryCmPrice +
+    embroideryUnitTotal +
+    consumptionTotal +
+    fabricMaterialTotal +
+    embroideryPrintTotal +
+    transportationTotal;
+
+  const marginValue = Math.max(0, Number(marginPercent) || 0);
+  const sellingPrice =
+    marginValue >= 100
+      ? totalCost
+      : totalCost / (1 - marginValue / 100);
+  const amount = sellingPrice * totalQuantity;
+  const roundOff = Math.round(amount) - amount;
+  const roundedAmount = amount + roundOff;
+  const discountValue = Math.max(0, Number(discount) || 0);
+  const taxableSubtotal = Math.max(0, roundedAmount - discountValue);
+  const vatValue = Math.max(0, Number(vatPercent) || 0);
+  const vatAmount = taxableSubtotal * (vatValue / 100);
+  const grandTotal = taxableSubtotal + vatAmount;
+
+  const formatAed = (value: number) =>
+    value.toLocaleString("en-AE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
 
   function addRepeatableField(
     setter: Dispatch<SetStateAction<string[]>>,
@@ -1542,6 +1603,147 @@ function NewOrderPage() {
               )}
             </div>
 
+            {/* ADDITIONAL COSTING */}
+            <div className="sm:col-span-2 rounded-lg border p-4">
+              <div className="mb-4">
+                <p className="text-sm font-semibold">Costing</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Add the production costs below. Totals update automatically without changing the existing order flow.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                {[
+                  {
+                    label: "Embroidery unit",
+                    values: embroideryUnits,
+                    setter: setEmbroideryUnits,
+                    prefix: "embroidery-unit",
+                    placeholder: "Enter embroidery unit",
+                    addTitle: "Add embroidery unit",
+                  },
+                  {
+                    label: "Consumption",
+                    values: consumptions,
+                    setter: setConsumptions,
+                    prefix: "consumption",
+                    placeholder: "Enter consumption",
+                    addTitle: "Add consumption",
+                  },
+                  {
+                    label: "Fabric / material AED",
+                    values: fabricMaterialCosts,
+                    setter: setFabricMaterialCosts,
+                    prefix: "fabric-material-cost",
+                    placeholder: "Enter fabric / material cost",
+                    addTitle: "Add fabric / material cost",
+                  },
+                  {
+                    label: "Embroidery/print cost AED",
+                    values: embroideryPrintCosts,
+                    setter: setEmbroideryPrintCosts,
+                    prefix: "embroidery-print-cost",
+                    placeholder: "Enter embroidery / print cost",
+                    addTitle: "Add embroidery / print cost",
+                  },
+                  {
+                    label: "Transportation AED",
+                    values: transportationCosts,
+                    setter: setTransportationCosts,
+                    prefix: "transportation-cost",
+                    placeholder: "Enter transportation cost",
+                    addTitle: "Add transportation cost",
+                  },
+                ].map((field) => (
+                  <div key={field.prefix} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>{field.label}</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7 rounded-full"
+                        onClick={() => addRepeatableField(field.setter, "0")}
+                        title={field.addTitle}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {field.values.map((value, index) => (
+                      <div key={index} className="flex gap-2">
+                        <Input
+                          id={`${field.prefix}-${index}`}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={value}
+                          placeholder={field.placeholder}
+                          onChange={(event) =>
+                            updateRepeatableField(field.setter, index, event.target.value)
+                          }
+                        />
+                        {field.values.length > 1 ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={() =>
+                              removeRepeatableField(field.setter, index)
+                            }
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="margin-percent">MARGIN %</Label>
+                  <Input
+                    id="margin-percent"
+                    type="number"
+                    min="0"
+                    max="99.99"
+                    step="0.01"
+                    value={marginPercent}
+                    onChange={(event) => setMarginPercent(event.target.value)}
+                    placeholder="Enter margin %"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-md bg-muted/50 p-3">
+                  <p className="label-caps">TOTAL COST</p>
+                  <p className="mt-1 font-semibold">AED {formatAed(totalCost)}</p>
+                </div>
+                <div className="rounded-md bg-muted/50 p-3">
+                  <p className="label-caps">SELLING PRICE (AED)</p>
+                  <p className="mt-1 font-semibold">AED {formatAed(sellingPrice)}</p>
+                </div>
+                <div className="rounded-md bg-muted/50 p-3">
+                  <p className="label-caps">AMOUNT (AED)</p>
+                  <p className="mt-1 font-semibold">AED {formatAed(amount)}</p>
+                </div>
+              </div>
+
+              {marginValue >= 100 ? (
+                <p className="mt-3 text-xs text-destructive">
+                  Margin must be below 100% for selling price calculation.
+                </p>
+              ) : null}
+
+              <div className="mt-3 rounded-md border p-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">ROUND OFF (AED)</span>
+                  <span className="font-semibold">AED {formatAed(roundOff)}</span>
+                </div>
+              </div>
+            </div>
+
             {/* COLOUR */}
             <div className="space-y-1.5">
               <Label htmlFor="color">
@@ -2252,6 +2454,78 @@ function NewOrderPage() {
                 </strong>{" "}
                 pieces
               </p>
+            </div>
+
+            <div className="rounded-lg border p-4">
+              <p className="label-caps mb-3">Cost summary</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <span>Total cost</span>
+                  <strong>AED {formatAed(totalCost)}</strong>
+                </div>
+                <div className="flex items-center justify-between border-b pb-2">
+                  <span>Margin</span>
+                  <strong>{formatAed(marginValue)}%</strong>
+                </div>
+                <div className="flex items-center justify-between border-b pb-2">
+                  <span>Selling price</span>
+                  <strong>AED {formatAed(sellingPrice)}</strong>
+                </div>
+                <div className="flex items-center justify-between border-b pb-2">
+                  <span>Amount</span>
+                  <strong>AED {formatAed(amount)}</strong>
+                </div>
+                <div className="flex items-center justify-between border-b pb-2">
+                  <span>Round off</span>
+                  <strong>AED {formatAed(roundOff)}</strong>
+                </div>
+                <div className="flex items-center justify-between border-b pb-2">
+                  <span>SUB TOTAL</span>
+                  <strong>AED {formatAed(roundedAmount)}</strong>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="discount">Discount (AED)</Label>
+                  <Input
+                    id="discount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={discount}
+                    onChange={(event) => setDiscount(event.target.value)}
+                    placeholder="Enter discount"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="vat-percent">VAT %</Label>
+                  <Input
+                    id="vat-percent"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={vatPercent}
+                    onChange={(event) => setVatPercent(event.target.value)}
+                    placeholder="Enter VAT %"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2 border-t pt-4 text-sm">
+                <div className="flex items-center justify-between">
+                  <span>Discount</span>
+                  <span>- AED {formatAed(discountValue)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>VAT ({formatAed(vatValue)}%)</span>
+                  <span>AED {formatAed(vatAmount)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t pt-3 text-base font-semibold">
+                  <span>GRAND TOTAL</span>
+                  <span>AED {formatAed(grandTotal)}</span>
+                </div>
+              </div>
             </div>
 
             <div>
