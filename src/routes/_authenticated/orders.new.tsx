@@ -300,9 +300,20 @@ function NewOrderPage() {
     setBusy(false);
 
     if (error) {
-      toast.error(friendlyError(error));
-      return;
-    }
+  console.error("CREATE ORDER ERROR:", error);
+  console.error("CREATE ORDER ERROR JSON:", JSON.stringify(error, null, 2));
+
+  setBusy(false);
+
+  toast.error(
+    error.message ||
+      error.details ||
+      error.hint ||
+      "Failed to create order",
+  );
+
+  return;
+}
 
     toast.success("Customer created");
 
