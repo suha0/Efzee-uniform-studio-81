@@ -3070,20 +3070,28 @@ async function downloadOrderSheet(
     // ------------------------------------------------------------
 
     const serialColumnWidth = 15;
-
-    const descriptionColumnWidth =
-      73;
-
+    const descriptionColumnWidth = 73;
     const totalColumnWidth = 22;
 
+    // Calculate the size-column width from the exact printable width.
+    // This keeps every size box identical and makes the table outer border
+    // line up exactly with the surrounding PDF sections.
     const sizeColumnWidth =
-      (
-        contentWidth -
+      (contentWidth -
         serialColumnWidth -
         descriptionColumnWidth -
-        totalColumnWidth
-      ) /
+        totalColumnWidth) /
       sizes.length;
+
+    const sizeColumnStyles = Object.fromEntries(
+      sizes.map((_, index) => [
+        index + 2,
+        {
+          cellWidth: sizeColumnWidth,
+          halign: "center",
+        },
+      ]),
+    );
 
     autoTable(doc, {
       startY: tableY,
@@ -3128,6 +3136,8 @@ async function downloadOrderSheet(
 
       // Exact same width as the surrounding PDF boxes.
       tableWidth: contentWidth,
+      tableLineColor: [75, 75, 75],
+      tableLineWidth: 0.25,
 
       styles: {
         font: "helvetica",
@@ -3170,84 +3180,17 @@ async function downloadOrderSheet(
       },
 
       columnStyles: {
-        // S/N
         0: {
-          cellWidth:
-            serialColumnWidth,
+          cellWidth: serialColumnWidth,
           halign: "center",
         },
-
-        // ITEM DESCRIPTION
         1: {
-          cellWidth:
-            descriptionColumnWidth,
+          cellWidth: descriptionColumnWidth,
           fontStyle: "bold",
         },
-
-        // ------------------------------------------------------
-        // ALL 9 SIZE COLUMNS HAVE IDENTICAL WIDTH
-        // ------------------------------------------------------
-
-        2: {
-          cellWidth:
-            sizeColumnWidth,
-          halign: "center",
-        },
-
-        3: {
-          cellWidth:
-            sizeColumnWidth,
-          halign: "center",
-        },
-
-        4: {
-          cellWidth:
-            sizeColumnWidth,
-          halign: "center",
-        },
-
-        5: {
-          cellWidth:
-            sizeColumnWidth,
-          halign: "center",
-        },
-
-        6: {
-          cellWidth:
-            sizeColumnWidth,
-          halign: "center",
-        },
-
-        7: {
-          cellWidth:
-            sizeColumnWidth,
-          halign: "center",
-        },
-
-        8: {
-          cellWidth:
-            sizeColumnWidth,
-          halign: "center",
-        },
-
-        9: {
-          cellWidth:
-            sizeColumnWidth,
-          halign: "center",
-        },
-
-        // Extra empty size column.
-        // EXACTLY the same width as all other sizes.
-        10: {
-          cellWidth:
-            sizeColumnWidth,
-          halign: "center",
-        },
-
-        // TOTAL
-        11: {
-          cellWidth:
-            totalColumnWidth,
+        ...sizeColumnStyles,
+        [sizes.length + 2]: {
+          cellWidth: totalColumnWidth,
           halign: "center",
         },
       },
@@ -3283,13 +3226,14 @@ async function downloadOrderSheet(
       },
     });
 
-    let y =
-      (
-        (doc as any)
-          .lastAutoTable
-          ?.finalY ??
-        tableY + 50
-      ) + 1;
+    const tableFinalY =
+      (doc as any).lastAutoTable?.finalY ??
+      tableY + 50;
+
+    // AutoTable already uses the exact printable width and explicit
+    // tableLine settings above, so no second outer rectangle is needed.
+
+    let y = tableFinalY + 1;
 
     // ------------------------------------------------------------
     // PRODUCT IMAGES + REMARKS
@@ -3506,7 +3450,7 @@ async function downloadOrderSheet(
     );
 
     doc.text(
-      "REMARKS:",
+      "COMMENTS:",
       margin + 2,
       y + 4.5,
     );
@@ -3538,7 +3482,7 @@ async function downloadOrderSheet(
       let remarkY =
         y + 9;
 
-      remarkLines.forEach(
+      remarkLines.slice(0, 5).forEach(
         (
           remark: string,
           index: number,

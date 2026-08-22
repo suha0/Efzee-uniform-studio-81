@@ -1,28 +1,12 @@
 import { useMemo, useState } from "react";
-import type {
-  ChangeEvent,
-  Dispatch,
-  SetStateAction,
-} from "react";
-
-import {
-  createFileRoute,
-  useNavigate,
-} from "@tanstack/react-router";
-
-import {
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-
 import {
   Check,
-  ImagePlus,
   Loader2,
   Plus,
-  X,
+  Trash2,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -32,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-
 import {
   Select,
   SelectContent,
@@ -43,92 +26,95 @@ import {
 
 import {
   PRIORITIES,
-  SIZES,
+  PRODUCT_CATEGORIES,
   friendlyError,
   titleize,
 } from "@/lib/domain";
 
-import {
-  logActivity,
-  notifyStaff,
-} from "@/lib/notify";
+import { logActivity, notifyStaff } from "@/lib/notify";
 
-export const Route = createFileRoute(
-  "/_authenticated/orders/new",
-)({
+export const Route = createFileRoute("/_authenticated/orders/new")({
   component: NewOrderPage,
 });
 
 const STEPS = [
   "Customer",
-  "Order info",
-  "Product",
-  "Sizes",
+  "Order information",
+  "Ordered items",
   "Additional",
   "Review",
 ];
 
-const SLEEVE_TYPES = [
-  "Sleeveless",
-  "Cap Sleeve",
-  "Short Sleeve",
-  "Elbow Sleeve",
-  "3/4 Sleeve",
-  "Full Sleeve",
-  "Long Sleeve",
-  "Bell Sleeve",
-  "Puff Sleeve",
-  "Bishop Sleeve",
-  "Raglan Sleeve",
-  "Batwing Sleeve",
-  "Dolman Sleeve",
-  "Lantern Sleeve",
-  "Flare Sleeve",
-  "Cuffed Sleeve",
-  "Roll-Up Sleeve",
-  "Cold-Shoulder Sleeve",
-  "Off-Shoulder Sleeve",
-  "Petal Sleeve",
-  "Tulip Sleeve",
-  "Kimono Sleeve",
-  "Leg-of-Mutton Sleeve",
-  "Juliet Sleeve",
-  "Cape Sleeve",
-  "Split Sleeve",
-  "Slit Sleeve",
-  "Trumpet Sleeve",
-  "Layered Sleeve",
-  "Other",
-];
+const SIZE_COLUMNS = [
+  { key: "XS", label: "XS/28" },
+  { key: "S", label: "S/30" },
+  { key: "M", label: "M/32" },
+  { key: "L", label: "L/34" },
+  { key: "XL", label: "XL/36" },
+  { key: "2XL", label: "2XL/38" },
+  { key: "3XL", label: "3XL/40" },
+  { key: "42", label: "42" },
+  { key: "Extra", label: "" },
+  { key: "MTM", label: "MTM" },
+] as const;
 
-function getCapturedTime() {
-  return new Date().toISOString();
+type SizeKey = (typeof SIZE_COLUMNS)[number]["key"];
+
+type ProductRow = {
+  id: string;
+  product_name: string;
+  product_category: string;
+  sizes: Record<SizeKey, string>;
+  fabric_supplier: string;
+  cm_unit: string;
+  fabric_color: string;
+  emb_print: string;
+  unit: string;
+  style_comments: string;
+};
+
+function createEmptySizes(): Record<SizeKey, string> {
+  return {
+    XS: "",
+    S: "",
+    M: "",
+    L: "",
+    XL: "",
+    "2XL": "",
+    "3XL": "",
+    "42": "",
+    Extra: "",
+    MTM: "",
+  };
 }
 
-function formatCapturedTime(value: string) {
-  if (!value) return "—";
+function createProduct(): ProductRow {
+  return {
+    id: crypto.randomUUID(),
+    product_name: "",
+    product_category: "School Uniform",
+    sizes: createEmptySizes(),
+    fabric_supplier: "",
+    cm_unit: "",
+    fabric_color: "",
+    emb_print: "",
+    unit: "",
+    style_comments: "",
+  };
+}
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+function getProductQuantity(product: ProductRow): number {
+  return Object.values(product.sizes).reduce((total, value) => {
+    const quantity = Number(value);
+    return total + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
+  }, 0);
 }
 
 function NewOrderPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const {
-    user,
-    profile,
-    canSell,
-  } = useAuth();
+  const { user, profile, canSell } = useAuth();
 
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -145,414 +131,153 @@ function NewOrderPage() {
     address: "",
   });
 
-  const [creatingCustomer, setCreatingCustomer] =
-    useState(false);
-
-  /*
-   * Time is captured automatically when
-   * the order creation page is opened.
-   */
-  const [timeCaptured] = useState(getCapturedTime);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
 
   const [order, setOrder] = useState({
-    order_number: `ORD-${Date.now()
-      .toString()
-      .slice(-6)}`,
-
-    order_date: new Date()
-      .toISOString()
-      .slice(0, 10),
-
+    order_number: `ORD-${Date.now().toString().slice(-6)}`,
+    batch_number: "",
+    order_date: new Date().toISOString().slice(0, 10),
     expected_delivery_date: "",
-
     priority: "normal",
 
-    product_name: "",
+    order_owner: "",
+    subject: "",
+    brand: "",
+    contact_person: "",
+    po_number: "",
+    quotation_number: "",
+    deal_reference: "",
 
-    /*
-     * Existing database field retained for compatibility.
-     * It stores the selected sleeve type.
-     */
-    product_category: "Short Sleeve",
-
-    color: "",
+    delivery_address: "",
+    payment_terms: "",
+    order_type: "",
+    pps_production: "",
 
     special_instructions: "",
-
     remarks: "",
   });
 
-  /*
-   * Repeatable Product Info fields.
-   */
-
-  const [fabricDetails, setFabricDetails] =
-    useState<string[]>([""]);
-
-  const [fabricSuppliers, setFabricSuppliers] =
-    useState<string[]>([""]);
-
-  const [cmUnits, setCmUnits] =
-    useState<string[]>([""]);
-
-  const [cmPrices, setCmPrices] =
-    useState<string[]>(["0"]);
-
-  /* Additional costing fields.
-   * These remain client-side so the existing Supabase schema and
-   * order creation flow are not changed.
-   */
-  const [embroideryUnits, setEmbroideryUnits] =
-    useState<string[]>(["0"]);
-  const [consumptions, setConsumptions] =
-    useState<string[]>(["0"]);
-  const [fabricMaterialCosts, setFabricMaterialCosts] =
-    useState<string[]>(["0"]);
-  const [embroideryPrintCosts, setEmbroideryPrintCosts] =
-    useState<string[]>(["0"]);
-  const [transportationCosts, setTransportationCosts] =
-    useState<string[]>(["0"]);
-  const [marginPercent, setMarginPercent] =
-    useState("0");
-  const [vatPercent, setVatPercent] =
-    useState("0");
-  const [discount, setDiscount] =
-    useState("0");
-
-  const [customizations, setCustomizations] =
-    useState<string[]>([""]);
-
-  const [accessories, setAccessories] =
-    useState<string[]>([""]);
-
-  const [sizes, setSizes] = useState<
-    Record<string, string>
-  >(
-    Object.fromEntries(
-      SIZES.map((size) => [size, ""]),
-    ),
-  );
-
-  const [customSizes, setCustomSizes] = useState<
-    Array<{
-      label: string;
-      quantity: string;
-    }>
-  >([]);
-
-  /*
-   * Reference/product images.
-   */
-  const [referenceImages, setReferenceImages] =
-    useState<File[]>([]);
-
-  const [imagePreviews, setImagePreviews] = useState<
-    Array<{
-      file: File;
-      url: string;
-    }>
-  >([]);
+  const [products, setProducts] = useState<ProductRow[]>([
+    createProduct(),
+  ]);
 
   const { data: customers = [] } = useQuery({
     queryKey: ["customers", "list"],
-
     queryFn: async () => {
       const { data, error } = await supabase
         .from("customers")
-        .select(
-          "id, customer_code, customer_name, organization",
-        )
+        .select("id, customer_code, customer_name, organization, address")
         .order("customer_name");
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       return data;
     },
   });
 
-  const sizeEntries = useMemo(() => {
-    const entries: Record<string, number> = {};
-
-    for (const [size, value] of Object.entries(
-      sizes,
-    )) {
-      const quantity = Number(value);
-
-      if (quantity > 0) {
-        entries[size] = quantity;
-      }
-    }
-
-    for (const row of customSizes) {
-      const quantity = Number(row.quantity);
-
-      if (
-        row.label.trim() &&
-        quantity > 0
-      ) {
-        entries[row.label.trim()] = quantity;
-      }
-    }
-
-    return entries;
-  }, [sizes, customSizes]);
-
-  const totalQuantity = Object.values(
-    sizeEntries,
-  ).reduce(
-    (sum, value) => sum + value,
-    0,
-  );
-
   const selectedCustomer = customers.find(
     (customer) => customer.id === customerId,
   );
 
-  /*
-   * Convert repeatable values into database text fields.
-   */
-
-  const fabricDetailsValue = fabricDetails
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .join(", ");
-
-  const fabricSupplierValue = fabricSuppliers
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .join(", ");
-
-  const cmUnitValue = cmUnits
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .join(", ");
-
-  const customizationValue = customizations
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .join(", ");
-
-  const accessoriesValue = accessories
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .join(", ");
-
-  /*
-   * Existing orders/order_items schema has one
-   * numeric unit_price field.
-   *
-   * The first CM price is used as the order's
-   * main unit price.
-   */
-  const primaryCmPrice =
-    Number(cmPrices[0]) || 0;
-
-  const sumNumericFields = (values: string[]) =>
-    values.reduce((sum, value) => {
-      const numericValue = Number(value);
-      return sum + (Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0);
-    }, 0);
-
-  const embroideryUnitTotal = sumNumericFields(embroideryUnits);
-  const consumptionTotal = sumNumericFields(consumptions);
-  const fabricMaterialTotal = sumNumericFields(fabricMaterialCosts);
-  const embroideryPrintTotal = sumNumericFields(embroideryPrintCosts);
-  const transportationTotal = sumNumericFields(transportationCosts);
-
-  const totalCost =
-    primaryCmPrice +
-    embroideryUnitTotal +
-    consumptionTotal +
-    fabricMaterialTotal +
-    embroideryPrintTotal +
-    transportationTotal;
-
-  const marginValue = Math.max(0, Number(marginPercent) || 0);
-  const sellingPrice =
-    marginValue >= 100
-      ? totalCost
-      : totalCost / (1 - marginValue / 100);
-  const amount = sellingPrice * totalQuantity;
-  const roundOff = Math.round(amount) - amount;
-  const roundedAmount = amount + roundOff;
-  const discountValue = Math.max(0, Number(discount) || 0);
-  const taxableSubtotal = Math.max(0, roundedAmount - discountValue);
-  const vatValue = Math.max(0, Number(vatPercent) || 0);
-  const vatAmount = taxableSubtotal * (vatValue / 100);
-  const grandTotal = taxableSubtotal + vatAmount;
-
-  const formatAed = (value: number) =>
-    value.toLocaleString("en-AE", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-
-  function addRepeatableField(
-    setter: Dispatch<SetStateAction<string[]>>,
-    defaultValue = "",
-  ) {
-    setter((current) => [
-      ...current,
-      defaultValue,
-    ]);
-  }
-
-  function removeRepeatableField(
-    setter: Dispatch<SetStateAction<string[]>>,
-    index: number,
-  ) {
-    setter((current) => {
-      if (current.length === 1) {
-        return [""];
-      }
-
-      return current.filter(
-        (_, itemIndex) =>
-          itemIndex !== index,
-      );
-    });
-  }
-
-  function updateRepeatableField(
-    setter: Dispatch<SetStateAction<string[]>>,
-    index: number,
-    value: string,
-  ) {
-    setter((current) =>
-      current.map(
-        (item, itemIndex) =>
-          itemIndex === index
-            ? value
-            : item,
-      ),
-    );
-  }
-
-  function addReferenceImages(
-    event: ChangeEvent<HTMLInputElement>,
-  ) {
-    const selectedFiles = Array.from(
-      event.target.files ?? [],
-    );
-
-    event.currentTarget.value = "";
-
-    const imageFiles = selectedFiles.filter(
-      (file) =>
-        file.type.startsWith("image/"),
-    );
-
-    if (
-      imageFiles.length !==
-      selectedFiles.length
-    ) {
-      toast.error(
-        "Only image files can be added.",
-      );
-    }
-
-    if (!imageFiles.length) {
-      return;
-    }
-
-    const available = Math.max(
+  const totalOrderQuantity = useMemo(() => {
+    return products.reduce(
+      (total, product) => total + getProductQuantity(product),
       0,
-      6 - referenceImages.length,
     );
+  }, [products]);
 
-    const filesToAdd =
-      imageFiles.slice(0, available);
-
-    if (
-      filesToAdd.length <
-      imageFiles.length
-    ) {
-      toast.error(
-        "You can add up to 6 reference images.",
-      );
-    }
-
-    const nextPreviews = filesToAdd.map(
-      (file) => ({
-        file,
-        url: URL.createObjectURL(file),
-      }),
-    );
-
-    setReferenceImages((current) => [
-      ...current,
-      ...filesToAdd,
-    ]);
-
-    setImagePreviews((current) => [
-      ...current,
-      ...nextPreviews,
-    ]);
-  }
-
-  function removeReferenceImage(
-    index: number,
-  ) {
-    setImagePreviews((current) => {
-      const preview = current[index];
-
-      if (preview) {
-        URL.revokeObjectURL(
-          preview.url,
-        );
-      }
-
-      return current.filter(
-        (_, itemIndex) =>
-          itemIndex !== index,
-      );
-    });
-
-    setReferenceImages((current) =>
-      current.filter(
-        (_, itemIndex) =>
-          itemIndex !== index,
-      ),
-    );
-  }
+  const customerAddress = selectedCustomer?.address ?? "";
 
   if (!canSell) {
     return (
       <div className="surface p-8 text-center">
-        <p className="font-medium">
-          Sales access required
-        </p>
+        <p className="font-medium">Sales access required</p>
 
         <p className="mt-1 text-sm text-muted-foreground">
-          Only sales staff and administrators
-          can create orders.
+          Only sales staff and administrators can create orders.
         </p>
       </div>
     );
   }
 
-  async function createCustomer() {
-    if (!newCustomer.customer_name.trim()) {
-      toast.error(
-        "Customer name is required",
-      );
+  function updateOrder(
+    field: keyof typeof order,
+    value: string,
+  ) {
+    setOrder((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function updateProduct(
+    productId: string,
+    field: keyof Omit<ProductRow, "id" | "sizes">,
+    value: string,
+  ) {
+    setProducts((current) =>
+      current.map((product) =>
+        product.id === productId
+          ? {
+              ...product,
+              [field]: value,
+            }
+          : product,
+      ),
+    );
+  }
+
+  function updateProductSize(
+    productId: string,
+    size: SizeKey,
+    value: string,
+  ) {
+    setProducts((current) =>
+      current.map((product) =>
+        product.id === productId
+          ? {
+              ...product,
+              sizes: {
+                ...product.sizes,
+                [size]: value,
+              },
+            }
+          : product,
+      ),
+    );
+  }
+
+  function addProduct() {
+    setProducts((current) => [
+      ...current,
+      createProduct(),
+    ]);
+  }
+
+  function removeProduct(productId: string) {
+    if (products.length === 1) {
+      toast.error("At least one product is required");
       return;
     }
 
-    /*
-     * Fixed email validation.
-     */
+    setProducts((current) =>
+      current.filter((product) => product.id !== productId),
+    );
+  }
+
+  async function createCustomer() {
+    if (!newCustomer.customer_name.trim()) {
+      toast.error("Customer name is required");
+      return;
+    }
+
     if (
       newCustomer.email &&
       !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(
         newCustomer.email,
       )
     ) {
-      toast.error(
-        "Enter a valid email address",
-      );
+      toast.error("Enter a valid email address");
       return;
     }
 
@@ -563,22 +288,19 @@ function NewOrderPage() {
       .slice(2, 7)
       .toUpperCase()}`;
 
-    const { data, error } =
-      await supabase
-        .from("customers")
-        .insert({
-          ...newCustomer,
-          customer_code: code,
-        })
-        .select("id")
-        .single();
+    const { data, error } = await supabase
+      .from("customers")
+      .insert({
+        ...newCustomer,
+        customer_code: code,
+      })
+      .select("id")
+      .single();
 
     setBusy(false);
 
     if (error) {
-      toast.error(
-        friendlyError(error),
-      );
+      toast.error(friendlyError(error));
       return;
     }
 
@@ -589,29 +311,27 @@ function NewOrderPage() {
     });
 
     setCustomerId(data.id);
+
+    setOrder((current) => ({
+      ...current,
+      delivery_address: newCustomer.address,
+      contact_person: newCustomer.customer_name,
+    }));
+
     setCreatingCustomer(false);
   }
 
-  function validateStep(
-    current: number,
-  ): boolean {
-    if (
-      current === 0 &&
-      !customerId
-    ) {
-      toast.error(
-        "Select or create a customer",
-      );
-      return false;
+  function validateStep(currentStep: number): boolean {
+    if (currentStep === 0) {
+      if (!customerId) {
+        toast.error("Select or create a customer");
+        return false;
+      }
     }
 
-    if (current === 1) {
-      if (
-        !order.order_number.trim()
-      ) {
-        toast.error(
-          "Order number is required",
-        );
+    if (currentStep === 1) {
+      if (!order.order_number.trim()) {
+        toast.error("Order number is required");
         return false;
       }
 
@@ -627,113 +347,38 @@ function NewOrderPage() {
       }
     }
 
-    if (
-      current === 2 &&
-      !order.product_name.trim()
-    ) {
-      toast.error(
-        "Product name is required",
-      );
-      return false;
-    }
+    if (currentStep === 2) {
+      if (products.length === 0) {
+        toast.error("Add at least one product");
+        return false;
+      }
 
-    if (
-      current === 3 &&
-      totalQuantity <= 0
-    ) {
-      toast.error(
-        "Enter at least one size quantity",
-      );
-      return false;
+      for (let index = 0; index < products.length; index += 1) {
+  const product = products[index];
+
+  if (!product) {
+    continue;
+  }
+
+  if (!product.product_name.trim()) {
+    toast.error(
+      `Product name is required for product ${index + 1}`,
+    );
+    return false;
+  }
+
+  if (getProductQuantity(product) <= 0) {
+    toast.error(
+      `Enter at least one quantity for ${
+        product.product_name || `product ${index + 1}`
+      }`,
+    );
+    return false;
+  }
+}
     }
 
     return true;
-  }
-
-  async function saveReferenceImages(
-    orderId: string,
-  ) {
-    if (
-      !user?.id ||
-      referenceImages.length === 0
-    ) {
-      return;
-    }
-
-    const failedFiles: string[] = [];
-
-    for (const file of referenceImages) {
-      try {
-        const extension =
-          file.name
-            .split(".")
-            .pop()
-            ?.toLowerCase() || "jpg";
-
-        const safeExtension =
-          /^[a-z0-9]+$/.test(extension)
-            ? extension
-            : "jpg";
-
-        const path = `${orderId}/reference-${crypto.randomUUID()}.${safeExtension}`;
-
-        const {
-          error: uploadError,
-        } = await supabase.storage
-          .from("production-images")
-          .upload(path, file, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType:
-              file.type ||
-              "image/jpeg",
-          });
-
-        if (uploadError) {
-          throw uploadError;
-        }
-
-        const {
-          error: rowError,
-        } = await supabase
-          .from("production_images")
-          .insert({
-            order_id: orderId,
-            stage:
-              "fabric_procurement" as never,
-            image_path: path,
-            description: `Reference image - ${file.name}`,
-            uploaded_by: user.id,
-          });
-
-        if (rowError) {
-          await supabase.storage
-            .from("production-images")
-            .remove([path]);
-
-          throw rowError;
-        }
-      } catch (error) {
-        console.error(
-          "Reference image upload failed:",
-          error,
-        );
-
-        failedFiles.push(file.name);
-      }
-    }
-
-    if (failedFiles.length > 0) {
-      throw new Error(
-        `Order was created, but ${failedFiles.length} reference image${
-          failedFiles.length === 1
-            ? ""
-            : "s"
-        } could not be saved: ${failedFiles.join(
-          ", ",
-        )}`,
-      );
-    }
   }
 
   async function submit(
@@ -742,328 +387,393 @@ function NewOrderPage() {
     if (
       !validateStep(0) ||
       !validateStep(1) ||
-      !validateStep(2) ||
-      !validateStep(3)
+      !validateStep(2)
     ) {
+      return;
+    }
+
+    if (!user?.id) {
+      toast.error("Your session has expired. Please sign in again.");
       return;
     }
 
     setBusy(true);
 
-    /*
-     * Use the first CM price as the
-     * existing order unit_price.
-     */
-    const unitPrice =
-      primaryCmPrice;
+    const firstProduct = products[0];
+
+if (!firstProduct) {
+  setBusy(false);
+  toast.error("At least one product is required");
+  return;
+}
 
     const orderPayload = {
-      order_number:
-        order.order_number.trim(),
+      order_number: order.order_number.trim(),
 
-      /*
-       * Batch number intentionally removed.
-       */
+      batch_number:
+        order.batch_number.trim() || null,
 
       customer_id: customerId,
 
-      created_by:
-        user?.id ?? null,
+      created_by: user.id,
 
-      order_date:
-        order.order_date,
+      order_date: order.order_date,
 
       expected_delivery_date:
-        order.expected_delivery_date ||
-        null,
+        order.expected_delivery_date || null,
 
       status,
 
-      priority:
-        order.priority as never,
-
-      product_name:
-        order.product_name.trim(),
+      priority: order.priority as never,
 
       /*
-       * Existing database field retained
-       * for compatibility.
-       *
-       * It stores the selected sleeve type.
+       * Existing order table compatibility.
+       * The first product remains represented here for
+       * existing dashboard/order-list functionality.
        */
-      product_category:
-        order.product_category,
+      product_name:
+        firstProduct.product_name.trim(),
 
-      total_quantity:
-        totalQuantity,
+      product_category:
+        firstProduct.product_category,
+
+      total_quantity: totalOrderQuantity,
 
       fabric_details:
-        fabricDetailsValue || null,
+        firstProduct.fabric_color.trim() || null,
 
       fabric_supplier:
-        fabricSupplierValue || null,
+        firstProduct.fabric_supplier.trim() || null,
 
       cm_unit:
-        cmUnitValue || null,
+        firstProduct.cm_unit.trim() || null,
 
-      accessory_details:
-        accessoriesValue || null,
+      accessory_details: null,
 
       customization_details:
-        customizationValue || null,
+        firstProduct.emb_print.trim() || null,
 
       special_instructions:
-        order.special_instructions ||
-        null,
+        order.special_instructions.trim() || null,
 
       remarks:
-        order.remarks || null,
+        order.remarks.trim() || null,
+
+      /*
+       * New order-sheet fields.
+       */
+      order_owner:
+        order.order_owner.trim() || user.id,
+
+      subject:
+        order.subject.trim() || null,
+
+      brand:
+        order.brand.trim() || null,
+
+      contact_person:
+        order.contact_person.trim() || null,
+
+      po_number:
+        order.po_number.trim() || null,
+
+      quotation_number:
+        order.quotation_number.trim() || null,
+
+      deal_reference:
+        order.deal_reference.trim() || null,
+
+      delivery_address:
+        order.delivery_address.trim() || null,
+
+      payment_terms:
+        order.payment_terms.trim() || null,
+
+      order_type:
+        order.order_type.trim() || null,
+
+      pps_production:
+        order.pps_production.trim() || null,
     } as any;
 
-    const {
-      data,
-      error,
-    } = await supabase
-      .from("orders")
-      .insert(orderPayload)
-      .select(
-        "id, order_number",
-      )
-      .single();
+    const { data: createdOrder, error: orderError } =
+      await supabase
+        .from("orders")
+        .insert(orderPayload)
+        .select("id, order_number")
+        .single();
 
-    if (error) {
+    if (orderError) {
+      setBusy(false);
+      toast.error(friendlyError(orderError));
+      return;
+    }
+
+    const itemPayloads = products.map((product) => {
+      const quantity = getProductQuantity(product);
+
+      return {
+        order_id: createdOrder.id,
+
+        product_name:
+          product.product_name.trim(),
+
+        product_type:
+          product.product_category,
+
+        quantity,
+
+        /*
+         * Quotation pricing does NOT belong in New Order.
+         * Keep zero for compatibility with the existing
+         * order_items schema. Commercial pricing will be
+         * handled by the dedicated Quotation module.
+         */
+        unit_price: 0,
+
+        total_price: 0,
+
+        fabric:
+          product.fabric_color.trim() || null,
+
+        color: null,
+
+        customization:
+          product.emb_print.trim() || null,
+
+        size_quantities:
+          Object.fromEntries(
+            Object.entries(product.sizes)
+              .map(([key, value]) => [
+                key,
+                Number(value),
+              ])
+              .filter(
+                ([, value]) =>
+                  typeof value === "number" &&
+                  Number.isFinite(value) &&
+                  value > 0,
+              ),
+          ) as never,
+
+        fabric_supplier:
+          product.fabric_supplier.trim() || null,
+
+        cm_unit:
+          product.cm_unit.trim() || null,
+
+        fabric_color:
+          product.fabric_color.trim() || null,
+
+        emb_print:
+          product.emb_print.trim() || null,
+
+        unit:
+          product.unit.trim() || null,
+
+        style_comments:
+          product.style_comments.trim() || null,
+      };
+    });
+
+    const { error: itemError } =
+      await supabase
+        .from("order_items")
+        .insert(itemPayloads as any);
+
+    if (itemError) {
+      /*
+       * Avoid leaving an order without its ordered items.
+       * The item insert failed, so remove the newly-created
+       * order as a cleanup action.
+       */
+      await supabase
+        .from("orders")
+        .delete()
+        .eq("id", createdOrder.id);
+
       setBusy(false);
 
       toast.error(
-        friendlyError(error),
+        `Order could not be saved: ${friendlyError(itemError)}`,
       );
 
       return;
     }
 
-    const {
-      error: itemError,
-    } = await supabase
-      .from("order_items")
-      .insert({
-        order_id: data.id,
-
-        product_name:
-          order.product_name.trim(),
-
-        product_type:
-          order.product_category,
-
-        quantity:
-          totalQuantity,
-
-        unit_price:
-          unitPrice,
-
-        total_price:
-          unitPrice *
-          totalQuantity,
-
-        fabric:
-          fabricDetailsValue ||
-          null,
-
-        color:
-          order.color || null,
-
-        customization:
-          customizationValue ||
-          null,
-
-        size_quantities:
-          sizeEntries as never,
-      });
-
-    if (itemError) {
-      toast.error(
-        friendlyError(itemError),
-      );
-    }
-
-    let imageSaveError:
-      unknown = null;
-
-    if (
-      referenceImages.length > 0
-    ) {
-      try {
-        await saveReferenceImages(
-          data.id,
-        );
-      } catch (error) {
-        imageSaveError = error;
-      }
-    }
-
     await logActivity({
-      orderId: data.id,
+      orderId: createdOrder.id,
 
-      action: `Order ${
+      action:
         status === "draft"
-          ? "saved as draft"
-          : "created"
-      } by ${
-        profile?.full_name ??
-        "staff"
-      }`,
+          ? `Order saved as draft by ${profile?.full_name ?? "staff"}`
+          : `Order created by ${profile?.full_name ?? "staff"}`,
 
-      actorId:
-        user?.id ?? null,
+      actorId: user.id,
 
       actorName:
-        profile?.full_name ??
-        null,
+        profile?.full_name ?? null,
     });
 
     if (status === "confirmed") {
       await notifyStaff({
-        title:
-          "New order confirmed",
+        title: "New order confirmed",
 
-        message: `${data.order_number} · ${order.product_name} (${totalQuantity} pcs)`,
+        message:
+          `${createdOrder.order_number} · ` +
+          `${products.length} product${
+            products.length === 1 ? "" : "s"
+          } · ` +
+          `${totalOrderQuantity} pcs`,
 
         type: "order",
 
-        orderId: data.id,
+        orderId: createdOrder.id,
       });
     }
 
-    await queryClient.invalidateQueries(
-      {
-        queryKey: ["orders"],
-      },
-    );
+    await queryClient.invalidateQueries({
+      queryKey: ["orders"],
+    });
 
-    await queryClient.invalidateQueries(
-      {
-        queryKey: ["dashboard"],
-      },
-    );
+    await queryClient.invalidateQueries({
+      queryKey: ["dashboard"],
+    });
 
     setBusy(false);
 
-    if (imageSaveError) {
-      toast.error(
-        imageSaveError instanceof Error
-          ? imageSaveError.message
-          : "Order created, but reference images could not be saved.",
-      );
-    } else {
-      toast.success(
-        status === "draft"
-          ? "Draft saved"
-          : "Order created successfully",
-      );
-    }
+    toast.success(
+      status === "draft"
+        ? "Draft saved"
+        : "Order created successfully",
+    );
 
     void navigate({
       to: "/orders/$orderId",
       params: {
-        orderId: data.id,
+        orderId: createdOrder.id,
       },
     });
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="New order"
-        description="Capture the full specification in six steps."
+        description="Capture the complete order-sheet specification."
       />
 
       <ol className="mb-6 flex flex-wrap gap-2">
-        {STEPS.map(
-          (label, index) => (
-            <li key={label}>
-              <button
-                type="button"
-                onClick={() => {
-                  if (index < step) {
-                    setStep(index);
-                  }
-                }}
-                className={
-                  index === step
-                    ? "rounded-full border border-accent bg-accent/15 px-3 py-1 text-xs font-medium text-accent-foreground"
-                    : index < step
-                      ? "rounded-full border px-3 py-1 text-xs text-muted-foreground"
-                      : "rounded-full border border-dashed px-3 py-1 text-xs text-muted-foreground/60"
+        {STEPS.map((label, index) => (
+          <li key={label}>
+            <button
+              type="button"
+              onClick={() => {
+                if (index < step) {
+                  setStep(index);
                 }
-              >
-                {index < step ? (
-                  <Check className="mr-1 inline h-3 w-3" />
-                ) : null}
+              }}
+              className={
+                index === step
+                  ? "rounded-full border border-accent bg-accent/15 px-3 py-1 text-xs font-medium text-accent-foreground"
+                  : index < step
+                    ? "rounded-full border px-3 py-1 text-xs text-muted-foreground"
+                    : "rounded-full border border-dashed px-3 py-1 text-xs text-muted-foreground/60"
+              }
+            >
+              {index < step ? (
+                <Check className="mr-1 inline h-3 w-3" />
+              ) : null}
 
-                {index + 1}. {label}
-              </button>
-            </li>
-          ),
-        )}
+              {index + 1}. {label}
+            </button>
+          </li>
+        ))}
       </ol>
 
       <div className="surface p-5">
-        {/* STEP 0 — CUSTOMER */}
+        {/* ================================================== */}
+        {/* STEP 1 — CUSTOMER                                  */}
+        {/* ================================================== */}
+
         {step === 0 ? (
-          <div className="space-y-4">
+          <div className="space-y-5">
+            <div>
+              <h2 className="text-base font-semibold">
+                Customer
+              </h2>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                Select an existing customer or create a new one.
+              </p>
+            </div>
+
             <div className="space-y-1.5">
-              <Label>
-                Existing customer
-              </Label>
+              <Label>Existing customer *</Label>
 
               <Select
                 value={customerId}
-                onValueChange={
-                  setCustomerId
-                }
+                onValueChange={(value) => {
+                  setCustomerId(value);
+
+                  const customer = customers.find(
+                    (item) => item.id === value,
+                  );
+
+                  if (customer) {
+                    setOrder((current) => ({
+                      ...current,
+                      delivery_address:
+                        current.delivery_address ||
+                        customer.address ||
+                        "",
+                    }));
+                  }
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Search and select a customer" />
                 </SelectTrigger>
 
                 <SelectContent>
-                  {customers.map(
-                    (customer) => (
-                      <SelectItem
-                        key={
-                          customer.id
-                        }
-                        value={
-                          customer.id
-                        }
-                      >
-                        {
-                          customer.customer_name
-                        }{" "}
-                        ·{" "}
-                        {
-                          customer.customer_code
-                        }
-                      </SelectItem>
-                    ),
-                  )}
+                  {customers.map((customer) => (
+                    <SelectItem
+                      key={customer.id}
+                      value={customer.id}
+                    >
+                      {customer.customer_name} ·{" "}
+                      {customer.customer_code}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
             {!creatingCustomer ? (
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 onClick={() =>
-                  setCreatingCustomer(
-                    true,
-                  )
+                  setCreatingCustomer(true)
                 }
               >
-                + New customer
+                <Plus className="mr-2 h-4 w-4" />
+                New customer
               </Button>
             ) : (
               <div className="rounded-md border p-4">
+                <div className="mb-4">
+                  <p className="font-medium">
+                    Create customer
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    Add the customer information before creating
+                    the order.
+                  </p>
+                </div>
+
                 <div className="grid gap-3 sm:grid-cols-2">
                   {(
                     [
@@ -1075,99 +785,70 @@ function NewOrderPage() {
                         "organization",
                         "Organization",
                       ],
-                      [
-                        "phone",
-                        "Phone",
-                      ],
-                      [
-                        "email",
-                        "Email",
-                      ],
-                      [
-                        "city",
-                        "City",
-                      ],
-                      [
-                        "state",
-                        "State",
-                      ],
+                      ["phone", "Phone"],
+                      ["email", "Email"],
+                      ["city", "City"],
+                      ["state", "State"],
                     ] as const
-                  ).map(
-                    ([field, label]) => (
-                      <div
-                        key={field}
-                        className="space-y-1.5"
-                      >
-                        <Label
-                          htmlFor={
-                            field
-                          }
-                        >
-                          {label}
-                        </Label>
+                  ).map(([field, label]) => (
+                    <div
+                      key={field}
+                      className="space-y-1.5"
+                    >
+                      <Label htmlFor={field}>
+                        {label}
+                      </Label>
 
-                        <Input
-                          id={field}
-                          value={
-                            newCustomer[
-                              field
-                            ]
-                          }
-                          onChange={(
-                            event,
-                          ) =>
-                            setNewCustomer(
-                              (
-                                current,
-                              ) => ({
-                                ...current,
-                                [field]:
-                                  event
-                                    .target
-                                    .value,
-                              }),
-                            )
-                          }
-                        />
-                      </div>
-                    ),
-                  )}
+                      <Input
+                        id={field}
+                        value={newCustomer[field]}
+                        onChange={(event) =>
+                          setNewCustomer(
+                            (current) => ({
+                              ...current,
+                              [field]:
+                                event.target.value,
+                            }),
+                          )
+                        }
+                      />
+                    </div>
+                  ))}
                 </div>
 
                 <div className="mt-3 space-y-1.5">
-                  <Label htmlFor="address">
+                  <Label htmlFor="customer-address">
                     Address
                   </Label>
 
                   <Textarea
-                    id="address"
-                    value={
-                      newCustomer.address
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    id="customer-address"
+                    rows={3}
+                    value={newCustomer.address}
+                    onChange={(event) =>
                       setNewCustomer(
                         (current) => ({
                           ...current,
                           address:
-                            event
-                              .target
-                              .value,
+                            event.target.value,
                         }),
                       )
                     }
                   />
                 </div>
 
-                <div className="mt-3 flex gap-2">
+                <div className="mt-4 flex gap-2">
                   <Button
                     size="sm"
-                    onClick={
-                      createCustomer
+                    onClick={() =>
+                      void createCustomer()
                     }
                     disabled={busy}
                   >
+                    {busy ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+
                     Save customer
                   </Button>
 
@@ -1175,989 +856,765 @@ function NewOrderPage() {
                     size="sm"
                     variant="ghost"
                     onClick={() =>
-                      setCreatingCustomer(
-                        false,
-                      )
+                      setCreatingCustomer(false)
                     }
+                    disabled={busy}
                   >
                     Cancel
                   </Button>
                 </div>
               </div>
             )}
+
+            {selectedCustomer ? (
+              <div className="rounded-md border bg-muted/20 p-4">
+                <p className="label-caps">
+                  Selected customer
+                </p>
+
+                <p className="mt-1 font-medium">
+                  {selectedCustomer.customer_name}
+                </p>
+
+                <p className="text-sm text-muted-foreground">
+                  {selectedCustomer.organization || "—"}
+                </p>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
-        {/* STEP 1 — ORDER INFO */}
+        {/* ================================================== */}
+        {/* STEP 2 — ORDER INFORMATION                         */}
+        {/* ================================================== */}
+
         {step === 1 ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="order_number">
-                Order number *
-              </Label>
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-base font-semibold">
+                Order information
+              </h2>
 
-              <Input
-                id="order_number"
-                value={
-                  order.order_number
-                }
-                onChange={(event) =>
-                  setOrder(
-                    (current) => ({
-                      ...current,
-                      order_number:
-                        event.target
-                          .value,
-                    }),
-                  )
-                }
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>
-                Time captured
-              </Label>
-
-              <Input
-                value={formatCapturedTime(
-                  timeCaptured,
-                )}
-                readOnly
-                className="bg-muted/50"
-              />
-
-              <p className="text-xs text-muted-foreground">
-                Automatically captured
-                when this order was
-                started.
+              <p className="mt-1 text-sm text-muted-foreground">
+                These fields correspond to the operational
+                information required on the company order sheet.
               </p>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="order_date">
-                Order date
-              </Label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="order_number">
+                  Order No *
+                </Label>
 
-              <Input
-                id="order_date"
-                type="date"
-                value={
-                  order.order_date
-                }
-                onChange={(event) =>
-                  setOrder(
-                    (current) => ({
-                      ...current,
-                      order_date:
-                        event.target
-                          .value,
-                    }),
-                  )
-                }
-              />
-            </div>
+                <Input
+                  id="order_number"
+                  value={order.order_number}
+                  onChange={(event) =>
+                    updateOrder(
+                      "order_number",
+                      event.target.value,
+                    )
+                  }
+                />
+              </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="delivery_date">
-                Expected delivery
-              </Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="order_date">
+                  Order Date
+                </Label>
 
-              <Input
-                id="delivery_date"
-                type="date"
-                value={
-                  order.expected_delivery_date
-                }
-                onChange={(event) =>
-                  setOrder(
-                    (current) => ({
-                      ...current,
-                      expected_delivery_date:
-                        event.target
-                          .value,
-                    }),
-                  )
-                }
-              />
-            </div>
+                <Input
+                  id="order_date"
+                  type="date"
+                  value={order.order_date}
+                  onChange={(event) =>
+                    updateOrder(
+                      "order_date",
+                      event.target.value,
+                    )
+                  }
+                />
+              </div>
 
-            <div className="space-y-1.5">
-              <Label>
-                Priority
-              </Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="brand">
+                  Brand
+                </Label>
 
-              <Select
-                value={order.priority}
-                onValueChange={(
-                  value,
-                ) =>
-                  setOrder(
-                    (current) => ({
-                      ...current,
-                      priority:
-                        value,
-                    }),
-                  )
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <Input
+                  id="brand"
+                  value={order.brand}
+                  onChange={(event) =>
+                    updateOrder(
+                      "brand",
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Enter brand"
+                />
+              </div>
 
-                <SelectContent>
-                  {PRIORITIES.map(
-                    (value) => (
+              <div className="space-y-1.5">
+                <Label htmlFor="contact_person">
+                  Contact Person
+                </Label>
+
+                <Input
+                  id="contact_person"
+                  value={order.contact_person}
+                  onChange={(event) =>
+                    updateOrder(
+                      "contact_person",
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Enter contact person"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="subject">
+                  Subject
+                </Label>
+
+                <Input
+                  id="subject"
+                  value={order.subject}
+                  onChange={(event) =>
+                    updateOrder(
+                      "subject",
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Order subject"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="batch_number">
+                  Batch Number
+                </Label>
+
+                <Input
+                  id="batch_number"
+                  value={order.batch_number}
+                  onChange={(event) =>
+                    updateOrder(
+                      "batch_number",
+                      event.target.value,
+                    )
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="po_number">
+                  PO Number
+                </Label>
+
+                <Input
+                  id="po_number"
+                  value={order.po_number}
+                  onChange={(event) =>
+                    updateOrder(
+                      "po_number",
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Purchase order / LPO"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="quotation_number">
+                  Quotation Number
+                </Label>
+
+                <Input
+                  id="quotation_number"
+                  value={order.quotation_number}
+                  onChange={(event) =>
+                    updateOrder(
+                      "quotation_number",
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Quotation reference"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="deal_reference">
+                  Deal Reference
+                </Label>
+
+                <Input
+                  id="deal_reference"
+                  value={order.deal_reference}
+                  onChange={(event) =>
+                    updateOrder(
+                      "deal_reference",
+                      event.target.value,
+                    )
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="order_type">
+                  Order Type
+                </Label>
+
+                <Input
+                  id="order_type"
+                  value={order.order_type}
+                  onChange={(event) =>
+                    updateOrder(
+                      "order_type",
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Enter order type"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="order_owner">
+                  Order Owner
+                </Label>
+
+                <Input
+                  id="order_owner"
+                  value={
+                    order.order_owner ||
+                    profile?.full_name ||
+                    ""
+                  }
+                  onChange={(event) =>
+                    updateOrder(
+                      "order_owner",
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Order owner"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Priority</Label>
+
+                <Select
+                  value={order.priority}
+                  onValueChange={(value) =>
+                    updateOrder(
+                      "priority",
+                      value,
+                    )
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    {PRIORITIES.map((value) => (
                       <SelectItem
                         key={value}
                         value={value}
                       >
-                        {titleize(
-                          value,
-                        )}
+                        {titleize(value)}
                       </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        ) : null}
-
-        {/* STEP 2 — PRODUCT */}
-        {step === 2 ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="product_name">
-                Product name *
-              </Label>
-
-              <Input
-                id="product_name"
-                value={
-                  order.product_name
-                }
-                onChange={(event) =>
-                  setOrder(
-                    (current) => ({
-                      ...current,
-                      product_name:
-                        event.target
-                          .value,
-                    }),
-                  )
-                }
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>
-                Sleeve type
-              </Label>
-
-              <Select
-                value={
-                  order.product_category
-                }
-                onValueChange={(
-                  value,
-                ) =>
-                  setOrder(
-                    (current) => ({
-                      ...current,
-                      product_category:
-                        value,
-                    }),
-                  )
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select sleeve type" />
-                </SelectTrigger>
-
-                <SelectContent>
-                  {SLEEVE_TYPES.map(
-                    (value) => (
-                      <SelectItem
-                        key={value}
-                        value={value}
-                      >
-                        {value}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* FABRIC DETAILS */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>
-                  Fabric details
-                </Label>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7 rounded-full"
-                  onClick={() =>
-                    addRepeatableField(
-                      setFabricDetails,
-                    )
-                  }
-                  title="Add fabric detail"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {fabricDetails.map(
-                (value, index) => (
-                  <div
-                    key={index}
-                    className="flex gap-2"
-                  >
-                    <Input
-                      id={`fabric-${index}`}
-                      value={value}
-                      placeholder={
-                        index === 0
-                          ? "Enter fabric details"
-                          : "Add another fabric"
-                      }
-                      onChange={(
-                        event,
-                      ) =>
-                        updateRepeatableField(
-                          setFabricDetails,
-                          index,
-                          event.target
-                            .value,
-                        )
-                      }
-                    />
-
-                    {fabricDetails.length >
-                    1 ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0"
-                        onClick={() =>
-                          removeRepeatableField(
-                            setFabricDetails,
-                            index,
-                          )
-                        }
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                  </div>
-                ),
-              )}
-            </div>
-
-            {/* FABRIC SUPPLIER */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>
-                  Fabric supplier
-                </Label>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7 rounded-full"
-                  onClick={() =>
-                    addRepeatableField(
-                      setFabricSuppliers,
-                    )
-                  }
-                  title="Add fabric supplier"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {fabricSuppliers.map(
-                (value, index) => (
-                  <div
-                    key={index}
-                    className="flex gap-2"
-                  >
-                    <Input
-                      id={`fabric-supplier-${index}`}
-                      value={value}
-                      placeholder={
-                        index === 0
-                          ? "Enter fabric supplier"
-                          : "Add another supplier"
-                      }
-                      onChange={(
-                        event,
-                      ) =>
-                        updateRepeatableField(
-                          setFabricSuppliers,
-                          index,
-                          event.target
-                            .value,
-                        )
-                      }
-                    />
-
-                    {fabricSuppliers.length >
-                    1 ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0"
-                        onClick={() =>
-                          removeRepeatableField(
-                            setFabricSuppliers,
-                            index,
-                          )
-                        }
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                  </div>
-                ),
-              )}
-            </div>
-
-            {/* CM UNIT */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>
-                  CM unit
-                </Label>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7 rounded-full"
-                  onClick={() =>
-                    addRepeatableField(
-                      setCmUnits,
-                    )
-                  }
-                  title="Add CM unit"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {cmUnits.map(
-                (value, index) => (
-                  <div
-                    key={index}
-                    className="flex gap-2"
-                  >
-                    <Input
-                      id={`cm-unit-${index}`}
-                      value={value}
-                      placeholder={
-                        index === 0
-                          ? "Enter CM unit"
-                          : "Add another CM unit"
-                      }
-                      onChange={(
-                        event,
-                      ) =>
-                        updateRepeatableField(
-                          setCmUnits,
-                          index,
-                          event.target
-                            .value,
-                        )
-                      }
-                    />
-
-                    {cmUnits.length >
-                    1 ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0"
-                        onClick={() =>
-                          removeRepeatableField(
-                            setCmUnits,
-                            index,
-                          )
-                        }
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                  </div>
-                ),
-              )}
-            </div>
-
-            {/* ADDITIONAL COSTING */}
-            <div className="sm:col-span-2 rounded-lg border p-4">
-              <div className="mb-4">
-                <p className="text-sm font-semibold">Costing</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Add the production costs below. Totals update automatically without changing the existing order flow.
-                </p>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                {[
-                  {
-                    label: "Embroidery unit",
-                    values: embroideryUnits,
-                    setter: setEmbroideryUnits,
-                    prefix: "embroidery-unit",
-                    placeholder: "Enter embroidery unit",
-                    addTitle: "Add embroidery unit",
-                  },
-                  {
-                    label: "Consumption",
-                    values: consumptions,
-                    setter: setConsumptions,
-                    prefix: "consumption",
-                    placeholder: "Enter consumption",
-                    addTitle: "Add consumption",
-                  },
-                  {
-                    label: "Fabric / material AED",
-                    values: fabricMaterialCosts,
-                    setter: setFabricMaterialCosts,
-                    prefix: "fabric-material-cost",
-                    placeholder: "Enter fabric / material cost",
-                    addTitle: "Add fabric / material cost",
-                  },
-                  {
-                    label: "Embroidery/print cost AED",
-                    values: embroideryPrintCosts,
-                    setter: setEmbroideryPrintCosts,
-                    prefix: "embroidery-print-cost",
-                    placeholder: "Enter embroidery / print cost",
-                    addTitle: "Add embroidery / print cost",
-                  },
-                  {
-                    label: "Transportation AED",
-                    values: transportationCosts,
-                    setter: setTransportationCosts,
-                    prefix: "transportation-cost",
-                    placeholder: "Enter transportation cost",
-                    addTitle: "Add transportation cost",
-                  },
-                ].map((field) => (
-                  <div key={field.prefix} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>{field.label}</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-7 w-7 rounded-full"
-                        onClick={() => addRepeatableField(field.setter, "0")}
-                        title={field.addTitle}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {field.values.map((value, index) => (
-                      <div key={index} className="flex gap-2">
-                        <Input
-                          id={`${field.prefix}-${index}`}
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={value}
-                          placeholder={field.placeholder}
-                          onChange={(event) =>
-                            updateRepeatableField(field.setter, index, event.target.value)
-                          }
-                        />
-                        {field.values.length > 1 ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="shrink-0"
-                            onClick={() =>
-                              removeRepeatableField(field.setter, index)
-                            }
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        ) : null}
-                      </div>
                     ))}
-                  </div>
-                ))}
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="margin-percent">MARGIN %</Label>
-                  <Input
-                    id="margin-percent"
-                    type="number"
-                    min="0"
-                    max="99.99"
-                    step="0.01"
-                    value={marginPercent}
-                    onChange={(event) => setMarginPercent(event.target.value)}
-                    placeholder="Enter margin %"
-                  />
-                </div>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-md bg-muted/50 p-3">
-                  <p className="label-caps">TOTAL COST</p>
-                  <p className="mt-1 font-semibold">AED {formatAed(totalCost)}</p>
-                </div>
-                <div className="rounded-md bg-muted/50 p-3">
-                  <p className="label-caps">SELLING PRICE (AED)</p>
-                  <p className="mt-1 font-semibold">AED {formatAed(sellingPrice)}</p>
-                </div>
-                <div className="rounded-md bg-muted/50 p-3">
-                  <p className="label-caps">AMOUNT (AED)</p>
-                  <p className="mt-1 font-semibold">
-  {totalQuantity > 0 ? `AED ${formatAed(amount)}` : "—"}
-</p>
-                </div>
-              </div>
-
-              {marginValue >= 100 ? (
-                <p className="mt-3 text-xs text-destructive">
-                  Margin must be below 100% for selling price calculation.
-                </p>
-              ) : null}
-
-              <div className="mt-3 rounded-md border p-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">ROUND OFF (AED)</span>
-                  <span className="font-semibold">
-  {totalQuantity > 0 ? `AED ${formatAed(roundOff)}` : "—"}
-</span>
-                </div>
-              </div>
-            </div>
-
-            {/* COLOUR */}
-            <div className="space-y-1.5">
-              <Label htmlFor="color">
-                Colour
-              </Label>
-
-              <Input
-                id="color"
-                value={order.color}
-                onChange={(event) =>
-                  setOrder(
-                    (current) => ({
-                      ...current,
-                      color: event
-                        .target
-                        .value,
-                    }),
-                  )
-                }
-              />
-            </div>
-
-            {/* ACCESSORIES */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>
-                  Accessories
+              <div className="space-y-1.5">
+                <Label htmlFor="expected_delivery_date">
+                  Delivery Date
                 </Label>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7 rounded-full"
-                  onClick={() =>
-                    addRepeatableField(
-                      setAccessories,
+                <Input
+                  id="expected_delivery_date"
+                  type="date"
+                  value={
+                    order.expected_delivery_date
+                  }
+                  onChange={(event) =>
+                    updateOrder(
+                      "expected_delivery_date",
+                      event.target.value,
                     )
                   }
-                  title="Add accessory"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
+                />
               </div>
 
-              {accessories.map(
-                (value, index) => (
-                  <div
-                    key={index}
-                    className="flex gap-2"
-                  >
-                    <Input
-                      id={`accessories-${index}`}
-                      value={value}
-                      placeholder={
-                        index === 0
-                          ? "Enter accessories"
-                          : "Add another accessory"
-                      }
-                      onChange={(
-                        event,
-                      ) =>
-                        updateRepeatableField(
-                          setAccessories,
-                          index,
-                          event.target
-                            .value,
-                        )
-                      }
-                    />
-
-                    {accessories.length >
-                    1 ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0"
-                        onClick={() =>
-                          removeRepeatableField(
-                            setAccessories,
-                            index,
-                          )
-                        }
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                  </div>
-                ),
-              )}
-            </div>
-
-            {/* CUSTOMIZATION */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>
-                  Customization
+              <div className="space-y-1.5">
+                <Label htmlFor="payment_terms">
+                  Payment Terms
                 </Label>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7 rounded-full"
-                  onClick={() =>
-                    addRepeatableField(
-                      setCustomizations,
+                <Input
+                  id="payment_terms"
+                  value={order.payment_terms}
+                  onChange={(event) =>
+                    updateOrder(
+                      "payment_terms",
+                      event.target.value,
                     )
                   }
-                  title="Add customization"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
+                  placeholder="e.g. 50% advance"
+                />
               </div>
 
-              {customizations.map(
-                (value, index) => (
-                  <div
-                    key={index}
-                    className="flex gap-2"
-                  >
-                    <Input
-                      id={`customization-${index}`}
-                      value={value}
-                      placeholder={
-                        index === 0
-                          ? "Enter customization"
-                          : "Add another customization"
-                      }
-                      onChange={(
-                        event,
-                      ) =>
-                        updateRepeatableField(
-                          setCustomizations,
-                          index,
-                          event.target
-                            .value,
-                        )
-                      }
-                    />
-
-                    {customizations.length >
-                    1 ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0"
-                        onClick={() =>
-                          removeRepeatableField(
-                            setCustomizations,
-                            index,
-                          )
-                        }
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                  </div>
-                ),
-              )}
-            </div>
-
-            {/* CM PRICE */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>
-                  CM Price (AED)
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="delivery_address">
+                  Delivery Address
                 </Label>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7 rounded-full"
-                  onClick={() =>
-                    addRepeatableField(
-                      setCmPrices,
-                      "0",
+                <Textarea
+                  id="delivery_address"
+                  rows={3}
+                  value={order.delivery_address}
+                  onChange={(event) =>
+                    updateOrder(
+                      "delivery_address",
+                      event.target.value,
                     )
                   }
-                  title="Add CM price"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
+                  placeholder={
+                    customerAddress ||
+                    "Enter delivery address"
+                  }
+                />
               </div>
 
-              {cmPrices.map(
-                (value, index) => (
-                  <div
-                    key={index}
-                    className="flex gap-2"
-                  >
-                    <Input
-                      id={`cm-price-${index}`}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={value}
-                      placeholder={
-                        index === 0
-                          ? "Enter CM price"
-                          : "Add another CM price"
-                      }
-                      onChange={(
-                        event,
-                      ) =>
-                        updateRepeatableField(
-                          setCmPrices,
-                          index,
-                          event.target
-                            .value,
-                        )
-                      }
-                    />
+              <div className="space-y-1.5">
+                <Label htmlFor="pps_production">
+                  PPS / Production
+                </Label>
 
-                    {cmPrices.length >
-                    1 ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0"
-                        onClick={() =>
-                          removeRepeatableField(
-                            setCmPrices,
-                            index,
-                          )
-                        }
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                  </div>
-                ),
-              )}
-
-              {cmPrices.length >
-              1 ? (
-                <p className="text-xs text-muted-foreground">
-                  The first CM price is
-                  used as the order's
-                  main unit price.
-                </p>
-              ) : null}
+                <Input
+                  id="pps_production"
+                  value={order.pps_production}
+                  onChange={(event) =>
+                    updateOrder(
+                      "pps_production",
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Enter PPS / production"
+                />
+              </div>
             </div>
           </div>
         ) : null}
 
-        {/* STEP 3 — SIZES */}
-        {step === 3 ? (
-          <div>
-            <div className="grid gap-3 sm:grid-cols-4">
-              {SIZES.map((size) => (
-                <div
-                  key={size}
-                  className="space-y-1.5"
-                >
-                  <Label
-                    htmlFor={`size-${size}`}
-                  >
-                    {size}
-                  </Label>
+        {/* ================================================== */}
+        {/* STEP 3 — ORDERED ITEMS                             */}
+        {/* ================================================== */}
 
-                  <Input
-                    id={`size-${size}`}
-                    type="number"
-                    min="0"
-                    value={
-                      sizes[size] ??
-                      ""
-                    }
-                    onChange={(event) =>
-                      setSizes(
-                        (current) => ({
-                          ...current,
-                          [size]:
-                            event.target
-                              .value,
-                        }),
-                      )
-                    }
-                  />
-                </div>
-              ))}
-            </div>
+        {step === 2 ? (
+          <div className="space-y-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold">
+                  Ordered Items
+                </h2>
 
-            {customSizes.map(
-              (row, index) => (
-                <div
-                  key={index}
-                  className="mt-3 flex gap-3"
-                >
-                  <Input
-                    placeholder="Custom size label"
-                    value={row.label}
-                    onChange={(
-                      event,
-                    ) =>
-                      setCustomSizes(
-                        (current) =>
-                          current.map(
-                            (
-                              item,
-                              itemIndex,
-                            ) =>
-                              itemIndex ===
-                              index
-                                ? {
-                                    ...item,
-                                    label:
-                                      event
-                                        .target
-                                        .value,
-                                  }
-                                : item,
-                          ),
-                      )
-                    }
-                  />
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Add every product separately and enter its
+                  size-wise quantities.
+                </p>
+              </div>
 
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="Qty"
-                    value={
-                      row.quantity
-                    }
-                    onChange={(
-                      event,
-                    ) =>
-                      setCustomSizes(
-                        (current) =>
-                          current.map(
-                            (
-                              item,
-                              itemIndex,
-                            ) =>
-                              itemIndex ===
-                              index
-                                ? {
-                                    ...item,
-                                    quantity:
-                                      event
-                                        .target
-                                        .value,
-                                  }
-                                : item,
-                          ),
-                      )
-                    }
-                  />
-                </div>
-              ),
-            )}
-
-            <div className="mt-4 flex items-center justify-between">
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  setCustomSizes(
-                    (current) => [
-                      ...current,
-                      {
-                        label: "",
-                        quantity: "",
-                      },
-                    ],
-                  )
-                }
+                onClick={addProduct}
               >
-                + Custom size
+                <Plus className="mr-2 h-4 w-4" />
+                Add Product
+              </Button>
+            </div>
+
+            <div className="rounded-md border bg-muted/20 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                <span>
+                  Products:{" "}
+                  <strong>{products.length}</strong>
+                </span>
+
+                <span>
+                  Total Quantity:{" "}
+                  <strong>{totalOrderQuantity}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              {products.map((product, productIndex) => {
+                const productQuantity =
+                  getProductQuantity(product);
+
+                return (
+                  <div
+                    key={product.id}
+                    className="overflow-hidden rounded-lg border"
+                  >
+                    {/* Product header */}
+                    <div className="flex items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold">
+                          Product {productIndex + 1}
+                        </p>
+
+                        <p className="text-xs text-muted-foreground">
+                          Total quantity:{" "}
+                          <strong>
+                            {productQuantity}
+                          </strong>
+                        </p>
+                      </div>
+
+                      {products.length > 1 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            removeProduct(product.id)
+                          }
+                          aria-label={`Remove product ${productIndex + 1}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    {/* Product name / category */}
+                    <div className="grid gap-4 p-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label>
+                          Product Name *
+                        </Label>
+
+                        <div className="flex gap-2">
+                          <Input
+                            value={product.product_name}
+                            onChange={(event) =>
+                              updateProduct(
+                                product.id,
+                                "product_name",
+                                event.target.value,
+                              )
+                            }
+                            placeholder="Enter product name"
+                          />
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={addProduct}
+                            aria-label="Add product"
+                            title="Add another product"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>
+                          Product Category
+                        </Label>
+
+                        <Select
+                          value={
+                            product.product_category
+                          }
+                          onValueChange={(value) =>
+                            updateProduct(
+                              product.id,
+                              "product_category",
+                              value,
+                            )
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+
+                          <SelectContent>
+                            {PRODUCT_CATEGORIES.map(
+                              (value) => (
+                                <SelectItem
+                                  key={value}
+                                  value={value}
+                                >
+                                  {value}
+                                </SelectItem>
+                              ),
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Size table */}
+                    <div className="border-y">
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[1100px] border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-muted/30">
+                              {SIZE_COLUMNS.map(
+                                (size) => (
+                                  <th
+                                    key={size.key}
+                                    className="border-r px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground last:border-r-0"
+                                  >
+                                    {size.label ||
+                                      "Extra"}
+                                  </th>
+                                ),
+                              )}
+
+                              <th className="border-r px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                Total
+                              </th>
+                            </tr>
+                          </thead>
+
+                          <tbody>
+                            <tr>
+                              {SIZE_COLUMNS.map(
+                                (size) => (
+                                  <td
+                                    key={size.key}
+                                    className="border-r p-2 last:border-r-0"
+                                  >
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={
+                                        product
+                                          .sizes[
+                                          size.key
+                                        ] ?? ""
+                                      }
+                                      onChange={(
+                                        event,
+                                      ) =>
+                                        updateProductSize(
+                                          product.id,
+                                          size.key,
+                                          event
+                                            .target
+                                            .value,
+                                        )
+                                      }
+                                      className="h-9 text-center"
+                                      aria-label={
+                                        size.label ||
+                                        "Extra"
+                                      }
+                                    />
+                                  </td>
+                                ),
+                              )}
+
+                              <td className="bg-muted/20 p-2 text-center">
+                                <span className="font-display text-lg font-bold">
+                                  {productQuantity}
+                                </span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Item-specific information */}
+                    <div className="grid gap-4 p-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label>
+                          Fabric Supplier
+                        </Label>
+
+                        <Input
+                          value={
+                            product.fabric_supplier
+                          }
+                          onChange={(event) =>
+                            updateProduct(
+                              product.id,
+                              "fabric_supplier",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="Fabric supplier"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>
+                          CM Unit
+                        </Label>
+
+                        <Input
+                          value={product.cm_unit}
+                          onChange={(event) =>
+                            updateProduct(
+                              product.id,
+                              "cm_unit",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="CM unit"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>
+                          Fabric / Colour
+                        </Label>
+
+                        <Input
+                          value={
+                            product.fabric_color
+                          }
+                          onChange={(event) =>
+                            updateProduct(
+                              product.id,
+                              "fabric_color",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="Fabric / colour"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>
+                          EMB / PRINT
+                        </Label>
+
+                        <Input
+                          value={product.emb_print}
+                          onChange={(event) =>
+                            updateProduct(
+                              product.id,
+                              "emb_print",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="Embroidery / print"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>
+                          Unit
+                        </Label>
+
+                        <Input
+                          value={product.unit}
+                          onChange={(event) =>
+                            updateProduct(
+                              product.id,
+                              "unit",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="Unit"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>
+                          Style Comments
+                        </Label>
+
+                        <Textarea
+                          rows={3}
+                          value={
+                            product.style_comments
+                          }
+                          onChange={(event) =>
+                            updateProduct(
+                              product.id,
+                              "style_comments",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="Enter style-specific comments"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addProduct}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add another product
               </Button>
 
-              <p className="text-sm">
-                Total quantity:{" "}
+              <div className="rounded-md border px-4 py-2 text-sm">
+                Total Order Quantity:{" "}
                 <span className="font-display text-lg font-bold">
-                  {totalQuantity}
+                  {totalOrderQuantity}
                 </span>
-              </p>
+              </div>
             </div>
           </div>
         ) : null}
 
-        {/* STEP 4 — ADDITIONAL */}
-        {step === 4 ? (
+        {/* ================================================== */}
+        {/* STEP 4 — ADDITIONAL                               */}
+        {/* ================================================== */}
+
+        {step === 3 ? (
           <div className="space-y-5">
+            <div>
+              <h2 className="text-base font-semibold">
+                Additional information
+              </h2>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                Add production instructions and general remarks
+                that should travel with the order.
+              </p>
+            </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="instructions">
-                Special instructions
+              <Label htmlFor="special_instructions">
+                Special Instructions
               </Label>
 
               <Textarea
-                id="instructions"
-                rows={3}
+                id="special_instructions"
+                rows={5}
                 value={
                   order.special_instructions
                 }
                 onChange={(event) =>
-                  setOrder(
-                    (current) => ({
-                      ...current,
-                      special_instructions:
-                        event.target
-                          .value,
-                    }),
+                  updateOrder(
+                    "special_instructions",
+                    event.target.value,
                   )
                 }
+                placeholder="Enter special production or order instructions"
               />
             </div>
 
@@ -2168,431 +1625,289 @@ function NewOrderPage() {
 
               <Textarea
                 id="remarks"
-                rows={3}
-                value={
-                  order.remarks
-                }
+                rows={5}
+                value={order.remarks}
                 onChange={(event) =>
-                  setOrder(
-                    (current) => ({
-                      ...current,
-                      remarks:
-                        event.target
-                          .value,
-                    }),
+                  updateOrder(
+                    "remarks",
+                    event.target.value,
                   )
                 }
+                placeholder="Enter remarks"
               />
             </div>
 
-            <div className="rounded-lg border p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <ImagePlus className="h-5 w-5 text-accent" />
+            <div className="rounded-md border bg-muted/20 p-4">
+              <p className="text-sm font-medium">
+                Product Images
+              </p>
 
-                    <Label className="text-sm font-semibold">
-                      Product / reference images
-                    </Label>
-                  </div>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Add up to 6 images.
-                    They will be saved
-                    to the order and
-                    included in the
-                    Order Sheet PDF.
-                  </p>
-                </div>
-
-                <span className="text-xs text-muted-foreground">
-                  {referenceImages.length}
-                  /6
-                </span>
-              </div>
-
-              <label
-                htmlFor="reference-image-upload"
-                className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed p-6 text-sm text-muted-foreground transition hover:bg-muted/50"
-              >
-                <ImagePlus className="mr-2 h-5 w-5" />
-                Click to add reference
-                images
-              </label>
-
-              <Input
-                id="reference-image-upload"
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                disabled={
-                  referenceImages.length >=
-                    6 || busy
-                }
-                onChange={
-                  addReferenceImages
-                }
-              />
-
-              {imagePreviews.length >
-              0 ? (
-                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {imagePreviews.map(
-                    (
-                      preview,
-                      index,
-                    ) => (
-                      <div
-                        key={`${preview.file.name}-${index}`}
-                        className="group relative overflow-hidden rounded-lg border"
-                      >
-                        <img
-                          src={
-                            preview.url
-                          }
-                          alt={
-                            preview.file
-                              .name
-                          }
-                          className="aspect-square w-full object-cover"
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            removeReferenceImage(
-                              index,
-                            )
-                          }
-                          className="absolute right-2 top-2 rounded-full bg-black/70 p-1.5 text-white opacity-0 transition group-hover:opacity-100"
-                          aria-label={`Remove ${preview.file.name}`}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-
-                        <div className="truncate border-t bg-background px-2 py-1.5 text-[11px]">
-                          {
-                            preview.file
-                              .name
-                          }
-                        </div>
-                      </div>
-                    ),
-                  )}
-                </div>
-              ) : (
-                <p className="mt-3 text-center text-xs text-muted-foreground">
-                  No reference images
-                  selected yet.
-                </p>
-              )}
+              <p className="mt-1 text-xs text-muted-foreground">
+                Product/reference images can continue to be
+                uploaded from the order details page after the
+                order is created.
+              </p>
             </div>
           </div>
         ) : null}
 
-        {/* STEP 5 — REVIEW */}
-        {step === 5 ? (
-          <div className="space-y-4 text-sm">
+        {/* ================================================== */}
+        {/* STEP 5 — REVIEW                                    */}
+        {/* ================================================== */}
+
+        {step === 4 ? (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-base font-semibold">
+                Review Order
+              </h2>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                Review the information before saving the order.
+              </p>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
+              <div className="rounded-md border p-4">
                 <p className="label-caps">
                   Customer
                 </p>
 
                 <p className="mt-1 font-medium">
-                  {
-                    selectedCustomer?.customer_name ??
-                    "—"
-                  }
+                  {selectedCustomer?.customer_name ||
+                    "—"}
                 </p>
 
-                <p className="text-muted-foreground">
-                  {
-                    selectedCustomer?.organization ??
-                    ""
-                  }
+                <p className="text-sm text-muted-foreground">
+                  {selectedCustomer?.organization ||
+                    "—"}
                 </p>
               </div>
 
-              <div>
+              <div className="rounded-md border p-4">
                 <p className="label-caps">
                   Order
                 </p>
 
                 <p className="mt-1 font-medium">
-                  {
-                    order.order_number
-                  }
+                  {order.order_number}
                 </p>
 
-                <p className="text-muted-foreground">
-                  {titleize(
-                    order.priority,
-                  )}{" "}
-                  priority
-                </p>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Time captured:{" "}
-                  <span className="font-medium">
-                    {formatCapturedTime(
-                      timeCaptured,
-                    )}
-                  </span>
+                <p className="text-sm text-muted-foreground">
+                  {order.order_date} ·{" "}
+                  {titleize(order.priority)}
                 </p>
               </div>
 
-              <div>
+              <div className="rounded-md border p-4">
                 <p className="label-caps">
-                  Product
+                  Brand
                 </p>
 
                 <p className="mt-1 font-medium">
-                  {
-                    order.product_name
-                  }
+                  {order.brand || "—"}
                 </p>
 
-                <p className="text-muted-foreground">
-                  Sleeve type:{" "}
-                  {
-                    order.product_category
-                  }
-                </p>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Fabric:{" "}
-                  {fabricDetailsValue ||
-                    "—"}
-                </p>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Fabric supplier:{" "}
-                  {fabricSupplierValue ||
-                    "—"}
-                </p>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  CM unit:{" "}
-                  {cmUnitValue ||
-                    "—"}
-                </p>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  CM price:{" "}
-                  {cmPrices
-                    .filter(
-                      (value) =>
-                        value.trim() !==
-                        "",
-                    )
-                    .join(", ") ||
-                    "—"}
-                </p>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Customization:{" "}
-                  {customizationValue ||
-                    "—"}
-                </p>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Accessories:{" "}
-                  {accessoriesValue ||
-                    "—"}
+                <p className="text-sm text-muted-foreground">
+                  Contact:{" "}
+                  {order.contact_person || "—"}
                 </p>
               </div>
 
-              <div>
+              <div className="rounded-md border p-4">
                 <p className="label-caps">
                   Delivery
                 </p>
 
                 <p className="mt-1 font-medium">
-                  {
-                    order.expected_delivery_date ||
-                    "Not set"
-                  }
+                  {order.expected_delivery_date ||
+                    "Not set"}
                 </p>
 
-                <p className="text-muted-foreground">
-                  Ordered{" "}
-                  {
-                    order.order_date
-                  }
+                <p className="text-sm text-muted-foreground">
+                  {order.payment_terms ||
+                    "Payment terms not set"}
                 </p>
               </div>
             </div>
 
-            <div>
-              <p className="label-caps mb-2">
-                Size breakdown
-              </p>
+            <div className="rounded-md border">
+              <div className="border-b px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-medium">
+                    Ordered Items
+                  </p>
 
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(
-                  sizeEntries,
-                ).map(
-                  ([
-                    size,
-                    quantity,
-                  ]) => (
-                    <span
-                      key={size}
-                      className="rounded-md border px-2.5 py-1 text-xs"
+                  <p className="text-sm text-muted-foreground">
+                    {totalOrderQuantity} pcs total
+                  </p>
+                </div>
+              </div>
+
+              <div className="divide-y">
+                {products.map(
+                  (product, index) => (
+                    <div
+                      key={product.id}
+                      className="p-4"
                     >
-                      {size}:{" "}
-                      <strong>
-                        {quantity}
-                      </strong>
-                    </span>
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="font-medium">
+                          {index + 1}.{" "}
+                          {product.product_name ||
+                            "Unnamed product"}
+                        </p>
+
+                        <p className="text-sm font-semibold">
+                          {getProductQuantity(
+                            product,
+                          )}{" "}
+                          pcs
+                        </p>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {SIZE_COLUMNS.map(
+                          (size) => {
+                            const quantity =
+                              Number(
+                                product.sizes[
+                                  size.key
+                                ],
+                              ) || 0;
+
+                            if (
+                              quantity <= 0
+                            ) {
+                              return null;
+                            }
+
+                            return (
+                              <span
+                                key={
+                                  size.key
+                                }
+                                className="rounded-md border px-2.5 py-1 text-xs"
+                              >
+                                {size.label ||
+                                  "Extra"}
+                                :{" "}
+                                <strong>
+                                  {
+                                    quantity
+                                  }
+                                </strong>
+                              </span>
+                            );
+                          },
+                        )}
+                      </div>
+
+                      <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                        <span>
+                          Fabric:{" "}
+                          {product.fabric_color ||
+                            "—"}
+                        </span>
+
+                        <span>
+                          Supplier:{" "}
+                          {product.fabric_supplier ||
+                            "—"}
+                        </span>
+
+                        <span>
+                          CM:{" "}
+                          {product.cm_unit ||
+                            "—"}
+                        </span>
+
+                        <span>
+                          EMB/PRINT:{" "}
+                          {product.emb_print ||
+                            "—"}
+                        </span>
+                      </div>
+
+                      {product.style_comments ? (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Style comments:{" "}
+                          {
+                            product.style_comments
+                          }
+                        </p>
+                      ) : null}
+                    </div>
                   ),
                 )}
               </div>
-
-              <p className="mt-2">
-                Total:{" "}
-                <strong>
-                  {totalQuantity}
-                </strong>{" "}
-                pieces
-              </p>
             </div>
 
-            <div className="rounded-lg border p-4">
-              <p className="label-caps mb-3">Cost summary</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <span>Total cost</span>
-                  <strong>AED {formatAed(totalCost)}</strong>
-                </div>
-                <div className="flex items-center justify-between border-b pb-2">
-                  <span>Margin</span>
-                  <strong>{formatAed(marginValue)}%</strong>
-                </div>
-                <div className="flex items-center justify-between border-b pb-2">
-                  <span>Selling price</span>
-                  <strong>AED {formatAed(sellingPrice)}</strong>
-                </div>
-                <div className="flex items-center justify-between border-b pb-2">
-                  <span>Amount</span>
-                  <strong>AED {formatAed(amount)}</strong>
-                </div>
-                <div className="flex items-center justify-between border-b pb-2">
-                  <span>Round off</span>
-                  <strong>AED {formatAed(roundOff)}</strong>
-                </div>
-                <div className="flex items-center justify-between border-b pb-2">
-                  <span>SUB TOTAL</span>
-                  <strong>AED {formatAed(roundedAmount)}</strong>
-                </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-md border p-4">
+                <p className="label-caps">
+                  Delivery Address
+                </p>
+
+                <p className="mt-1 whitespace-pre-wrap text-sm">
+                  {order.delivery_address ||
+                    "—"}
+                </p>
               </div>
 
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="discount">Discount (AED)</Label>
-                  <Input
-                    id="discount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={discount}
-                    onChange={(event) => setDiscount(event.target.value)}
-                    placeholder="Enter discount"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="vat-percent">VAT %</Label>
-                  <Input
-                    id="vat-percent"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={vatPercent}
-                    onChange={(event) => setVatPercent(event.target.value)}
-                    placeholder="Enter VAT %"
-                  />
-                </div>
-              </div>
+              <div className="rounded-md border p-4">
+                <p className="label-caps">
+                  PPS / Production
+                </p>
 
-              <div className="mt-4 space-y-2 border-t pt-4 text-sm">
-                <div className="flex items-center justify-between">
-                  <span>Discount</span>
-                  <span>- AED {formatAed(discountValue)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>VAT ({formatAed(vatValue)}%)</span>
-                  <span>AED {formatAed(vatAmount)}</span>
-                </div>
-                <div className="flex items-center justify-between border-t pt-3 text-base font-semibold">
-                  <span>GRAND TOTAL</span>
-                  <span>AED {formatAed(grandTotal)}</span>
-                </div>
+                <p className="mt-1 text-sm">
+                  {order.pps_production || "—"}
+                </p>
               </div>
             </div>
 
-            <div>
-              <p className="label-caps mb-2">
-                Reference images
-              </p>
+            <div className="rounded-md border bg-muted/20 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">
+                  Total Order Quantity
+                </span>
 
-              <p className="text-muted-foreground">
-                {referenceImages.length >
-                0
-                  ? `${referenceImages.length} image${
-                      referenceImages.length ===
-                      1
-                        ? ""
-                        : "s"
-                    } will be saved with the order and included in the PDF.`
-                  : "No reference images selected."}
-              </p>
+                <span className="font-display text-2xl font-bold">
+                  {totalOrderQuantity}
+                </span>
+              </div>
             </div>
           </div>
         ) : null}
 
-        {/* NAVIGATION */}
+        {/* ================================================== */}
+        {/* NAVIGATION                                         */}
+        {/* ================================================== */}
+
         <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t pt-4">
           <Button
             variant="ghost"
-            onClick={() =>
-              step === 0
-                ? navigate({
-                    to: "/orders",
-                  })
-                : setStep(
-                    step - 1,
-                  )
-            }
+            onClick={() => {
+              if (step === 0) {
+                void navigate({
+                  to: "/orders",
+                });
+              } else {
+                setStep((current) => current - 1);
+              }
+            }}
             disabled={busy}
           >
-            {step === 0
-              ? "Cancel"
-              : "Back"}
+            {step === 0 ? "Cancel" : "Back"}
           </Button>
 
           <div className="flex gap-2">
-            {step ===
-            STEPS.length - 1 ? (
+            {step === STEPS.length - 1 ? (
               <>
                 <Button
                   variant="outline"
                   onClick={() =>
-                    void submit(
-                      "draft",
-                    )
-                  }
-                  disabled={busy}
-                >
-                  Save draft
-                </Button>
-
-                <Button
-                  onClick={() =>
-                    void submit(
-                      "confirmed",
-                    )
+                    void submit("draft")
                   }
                   disabled={busy}
                 >
@@ -2600,19 +1915,29 @@ function NewOrderPage() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : null}
 
-                  Create order
+                  Save Draft
+                </Button>
+
+                <Button
+                  onClick={() =>
+                    void submit("confirmed")
+                  }
+                  disabled={busy}
+                >
+                  {busy ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+
+                  Create Order
                 </Button>
               </>
             ) : (
               <Button
                 onClick={() => {
-                  if (
-                    validateStep(
-                      step,
-                    )
-                  ) {
+                  if (validateStep(step)) {
                     setStep(
-                      step + 1,
+                      (current) =>
+                        current + 1,
                     );
                   }
                 }}
